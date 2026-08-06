@@ -1,0 +1,18 @@
+{
+  "name": "job-copilot-server",
+  "version": "1.0.0",
+  "description": "求职助手云端 API(Render + Neon):抓取解析 → 打分 → 生成材料 → 导出 PDF/docx",
+  "type": "module",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "pg": "^8.13.1"
+  }
+}

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <h1>Job Copilot</h1>
+    <span id="health" class="dot" title="本地服务状态"></span>
+  </header>
+
+  <button id="capture">抓取此职位</button>
+  <button id="panel" class="secondary">打开面板(生成 / 查看材料)</button>
+  <p id="status" class="status"></p>
+
+  <div id="result" class="result" hidden>
+    <div class="score-row">
+      <span id="score" class="score"></span>
+      <span id="verdict" class="verdict"></span>
+    </div>
+    <div id="title" class="title"></div>
+    <div id="meta" class="meta"></div>
+    <ul id="rationale" class="rationale"></ul>
+    <div id="next" class="next"></div>
+  </div>
+
+  <footer id="hint" class="hint"></footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

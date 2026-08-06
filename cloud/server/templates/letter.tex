@@ -1,0 +1,12 @@
+% Cover Letter PDF 排版预设(pandoc --include-in-header 引入,xelatex 编译)
+% 目标:标准商务信函观感——单栏、左对齐、段落分明、适度留白、一页
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage{fontspec}
+\setmainfont{XCharter}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\pagestyle{empty}
+\setlist[itemize]{leftmargin=1.3em,itemsep=2pt,topsep=3pt,parsep=0pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{7pt}
+\linespread{1.05}

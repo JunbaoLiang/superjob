@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Job Copilot 抓取(云端)",
+  "version": "1.0.0",
+  "description": "一键抓取当前招聘页正文,发到你的云端求职助手解析 + 打分。服务地址和口令在扩展选项里配置。",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "抓取此职位"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  }
+}

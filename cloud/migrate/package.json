@@ -1,0 +1,10 @@
+{
+  "name": "job-copilot-migrate",
+  "version": "1.0.0",
+  "description": "把本地 data/(职位 + 档案 + 成品文件)一次性导入 Neon 云数据库",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

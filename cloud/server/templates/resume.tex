@@ -1,0 +1,29 @@
+% 简历 PDF 排版预设(pandoc --include-in-header 引入,xelatex 编译)
+% 目标:单栏、衬线、蓝色小型大写小节标题、年份右对齐、ATS/HR/AI 友好、一页
+% 想调样式改这里即可,不用动代码:
+%   - 字体:\setmainfont{...}(Charter / Georgia / Times New Roman 等)
+%   - 主色:accent(小节标题与分隔线的蓝);字号由渲染逻辑传入(默认 11pt)
+%   - 松紧:geometry 边距 / parskip / itemsep / titlespacing
+\usepackage[letterpaper,margin=0.5in]{geometry}
+\usepackage{fontspec}
+\setmainfont{XCharter}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\pagestyle{empty}
+\definecolor{accent}{HTML}{22568F}     % 小节标题 / 分隔线的蓝
+\definecolor{datecolor}{gray}{0.4}      % 右对齐年份的灰
+\setlist[itemize]{label=\textbullet,leftmargin=1.3em,itemsep=1.5pt,topsep=2pt,parsep=0pt,after=\vspace{1pt}}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2.5pt}
+\linespread{1.0}
+% 姓名(通常已由导出逻辑改为居中抬头块,这里作兜底)
+\titleformat{\section}{\centering\LARGE\bfseries}{}{0em}{}
+\titlespacing*{\section}{0pt}{0pt}{1pt}
+% 小节标题(SUMMARY / PROJECTS ...):蓝色加粗小型大写 + 蓝色分隔线
+\titleformat{\subsection}{\normalsize\bfseries\scshape\color{accent}}{}{0em}{}[{\color{accent}\titlerule[0.9pt]}]
+\titlespacing*{\subsection}{0pt}{7pt}{2.5pt}
+% 经历/项目标题(年份右对齐由标题内 \hfill 实现)
+\titleformat{\subsubsection}{\normalsize\bfseries}{}{0em}{}
+\titlespacing*{\subsubsection}{0pt}{6pt}{1pt}

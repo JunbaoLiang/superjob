@@ -1,0 +1,20 @@
+{
+  "name": "job-copilot",
+  "version": "0.1.0",
+  "description": "个人求职助手:JD 解析 → 匹配打分 → 生成投递材料 → 面试准备",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "job": "./src/cli.js"
+  },
+  "scripts": {
+    "add": "node src/cli.js add",
+    "list": "node src/cli.js list"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest"
+  }
+}

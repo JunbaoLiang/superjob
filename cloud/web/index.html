@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Job Copilot 面板</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Job Copilot</h1>
+  <span class="hint" id="hint"></span>
+  <span class="subtle">拖动卡片改状态 · 点卡片看详情</span>
+  <button class="ghost" onclick="openProfile()">档案</button>
+  <button class="ghost" onclick="loadBoard()">刷新</button>
+  <button class="ghost" onclick="logout()" title="清除已保存的服务地址和口令">退出</button>
+</header>
+
+<div class="board" id="board"></div>
+
+<div class="scrim" id="scrim" hidden onclick="closeDetail()"></div>
+<div class="drawer" id="drawer" hidden>
+  <button class="x" onclick="closeDetail()">✕</button>
+  <div id="detail"></div>
+</div>
+
+<!-- 登录层:API 地址 + 访问口令,存 localStorage -->
+<div class="login" id="login" hidden>
+  <div class="loginbox">
+    <h2>连接你的 Job Copilot 服务</h2>
+    <p class="meta">首次使用填一次即可,浏览器会记住。</p>
+    <label>API 地址(Render 服务地址)</label>
+    <input id="inUrl" placeholder="https://job-copilot-api-xxxx.onrender.com" autocomplete="off">
+    <label>访问口令(Render 环境变量 APP_TOKEN 的值)</label>
+    <input id="inToken" type="password" placeholder="APP_TOKEN" autocomplete="off">
+    <button id="loginBtn" onclick="doLogin()">连接</button>
+    <div class="loginerr" id="loginErr"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# Render Blueprint:在 Render 上选「New +」→「Blueprint」→ 连接这个仓库即可。
+# 注意:把本文件放在仓库根目录(部署指南里有说明)。
+services:
+  - type: web
+    name: job-copilot-api
+    runtime: docker
+    rootDir: cloud/server
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL        # Neon 连接串,创建 Neon 项目后粘贴
+        sync: false
+      - key: ANTHROPIC_API_KEY   # Claude API key
+        sync: false
+      - key: APP_TOKEN           # 访问口令,自动生成;面板和扩展里要填同一个
+        generateValue: true
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-6

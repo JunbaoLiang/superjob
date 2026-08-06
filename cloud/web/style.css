@@ -1,0 +1,69 @@
+:root{--accent:#22568f;--ink:#1b2027;--muted:#5c6675;--line:#e4e8ee;--bg:#f6f7f9;--card:#fff;
+--green:#2e7d5b;--amber:#b0730e;--red:#b4472f;}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.55 -apple-system,"Helvetica Neue",Arial,sans-serif;color:var(--ink);background:var(--bg)}
+header{display:flex;align-items:center;gap:10px;padding:11px 18px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:8}
+header h1{font-size:16px;color:var(--accent);margin:0}
+header .hint{color:var(--muted);font-size:12px;flex:1}
+header .subtle{color:#9aa4b0;font-size:12px}
+button{font:inherit;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+button.ghost{background:#eef1f5;color:var(--ink)}
+button.danger{background:#fff;color:#b4472f;border:1px solid #e3b9af}
+button:disabled{opacity:.55;cursor:default}
+select{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit}
+input{font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;width:100%}
+
+/* —— 看板 —— */
+.board{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding:16px 18px 30px;height:calc(100vh - 48px)}
+.col{flex:0 0 216px;width:216px;background:#eef1f5;border-radius:12px;padding:8px 8px 12px;max-height:100%;display:flex;flex-direction:column}
+.col.over{outline:2px dashed var(--accent);outline-offset:-2px;background:#e5edf6}
+.colhead{font-size:12.5px;font-weight:700;color:var(--muted);padding:4px 6px 9px;display:flex;align-items:center;gap:6px}
+.colhead .cnt{background:#dfe4ea;color:var(--muted);border-radius:20px;padding:0 7px;font-size:11px}
+.cards{overflow-y:auto;display:flex;flex-direction:column;gap:8px;min-height:24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px 11px;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.card:active{cursor:grabbing}
+.card.drag{opacity:.4}
+.card .cco{font-weight:650;font-size:13px}
+.card .cti{color:var(--muted);font-size:12px;margin-top:1px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .crow{margin-top:6px;display:flex;align-items:center;gap:6px}
+.pill{font-size:11px;padding:1px 7px;border-radius:20px;font-weight:600;white-space:nowrap}
+.strong_match{color:var(--green);background:rgba(46,125,91,.12)}
+.worth_applying,.stretch{color:var(--amber);background:rgba(176,115,14,.13)}
+.skip{color:var(--red);background:rgba(180,71,47,.12)}
+.empty{color:#9aa4b0;font-size:12px;padding:6px}
+
+/* —— 详情抽屉 —— */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.34);z-index:15}
+.drawer{position:fixed;top:0;right:0;width:min(560px,94vw);height:100vh;background:var(--card);box-shadow:-8px 0 40px rgba(0,0,0,.2);z-index:16;overflow:auto;padding:16px 22px 40px}
+.drawer .x{position:sticky;top:0;float:right;background:#eef1f5;color:var(--ink);border:none;border-radius:8px;width:30px;height:30px;padding:0;font-size:16px;cursor:pointer}
+h2{font-size:18px;margin:2px 40px 4px 0}
+.meta{color:var(--muted);font-size:13px}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0}
+.sec{background:#fbfcfd;border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin:12px 0}
+.sec h3{margin:0 0 8px;font-size:13px;color:var(--accent)}
+ul.tight{margin:4px 0;padding-left:20px}ul.tight li{margin:3px 0}
+.tabs{display:flex;gap:6px;margin:12px 0 8px;flex-wrap:wrap}
+.tabs button{background:#eef1f5;color:var(--ink);padding:6px 12px;font-weight:600}
+.tabs button.on{background:var(--accent);color:#fff}
+.links{margin:6px 0}.links a{color:var(--accent);margin-right:14px;font-size:13px;cursor:pointer}
+.viewer{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 20px}
+.viewer h1{font-size:19px;text-align:center;margin:.2em 0}
+.viewer h2{font-size:14px;color:var(--accent);border-bottom:1px solid var(--line);padding-bottom:3px;margin:13px 0 6px 0}
+.viewer h3{font-size:13px;margin:9px 0 3px}
+.viewer table{border-collapse:collapse;margin:6px 0}.viewer td,.viewer th{border:1px solid var(--line);padding:3px 9px;text-align:left}
+.viewer code{background:#eef1f5;padding:1px 5px;border-radius:4px;font:12px "SF Mono",Menlo,monospace}
+.viewer ul{padding-left:20px}
+iframe.pdf{width:100%;height:70vh;border:1px solid var(--line);border-radius:10px}
+.prog{font-family:"SF Mono",Menlo,monospace;font-size:12px;color:var(--muted);white-space:pre-wrap;margin-top:8px}
+.ota{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:13px/1.5 -apple-system,Arial,sans-serif;resize:vertical;color:var(--ink)}
+.ota.mono{font:12px/1.5 "SF Mono",Menlo,monospace}
+.olabel{display:block;font-size:12px;color:var(--muted);margin:9px 0 3px}
+.ocount{font-weight:600;font-variant-numeric:tabular-nums}
+
+/* —— 登录层 —— */
+.login{position:fixed;inset:0;background:var(--bg);z-index:30;display:flex;align-items:center;justify-content:center}
+.loginbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px 28px;width:min(430px,92vw);box-shadow:0 12px 40px rgba(0,0,0,.08)}
+.loginbox h2{margin:0 0 4px;font-size:17px;color:var(--accent)}
+.loginbox label{display:block;font-size:12px;color:var(--muted);margin:13px 0 4px}
+.loginbox button{width:100%;margin-top:16px;padding:10px}
+.loginerr{color:#b4472f;font-size:13px;margin-top:10px;min-height:18px}

@@ -1,0 +1,28 @@
+# Dependencies and operating-system metadata
+node_modules/
+.DS_Store
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+.capture-token
+.claude/settings.local.json
+.planning/
+
+# Candidate data, job records, generated application material, and runtime logs
+data/profile/
+data/jobs/*
+!data/jobs/.gitkeep
+data/server.log
+data/*.log
+*.pdf
+*.docx
+
+# Local, unreviewed material. Add sanitized fixtures explicitly in a later task.
+dropoff.md
+sample-jd.txt
+sample-jd-match.txt
+
+# Redundant local nested repository; preserved locally but never tracked here.
+superjob/
