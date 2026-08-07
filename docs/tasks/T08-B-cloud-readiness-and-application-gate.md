@@ -44,7 +44,7 @@ material_readiness  JSONB NULL
 
 1. 先运行发布检查和密钥扫描；只提交/push 审核过的公开代码。
 2. 等 Render 部署新代码；仅验证 `/health` 与未鉴权请求仍为 401。
-3. 使用用户自己持有的 `DATABASE_URL` 执行只读 `cloud/migrate/readiness-backfill.js --dry-run`，或在 Neon SQL Console 执行等价只读统计。不得把连接串复制进 Git、聊天或命令输出。
+3. 在仓库根目录先执行一次 `npm install`（该安装包含回填脚本所需的 `pg`），再使用用户自己持有的 `DATABASE_URL` 执行只读 `cloud/migrate/readiness-backfill.js --dry-run`，或在 Neon SQL Console 执行等价只读统计。不得把连接串复制进 Git、聊天或命令输出。
 4. 输出仅包括：活跃将新增数、各 readiness 状态数、已有 metadata 数、历史保留数、异常数；不输出岗位名、JD、简历、求职信或 raw text。
 
 ## T08-B3 — 云端 active-only backfill（需 dry-run 后再次确认）
