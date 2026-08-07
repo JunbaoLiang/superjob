@@ -18,6 +18,7 @@ import { startServer } from "./server.js";
 import { config } from "./config.js";
 import { canAutoGenerateMaterials, scoreView, shouldAutoSkip, usesMassApplyAngle } from "./score-policy.js";
 import { inspectScoreReplay } from "./score-replay.js";
+import { collectJobMetrics } from "./metrics.js";
 import { parseBatchInput, prepareBatchCapture } from "./batch-import.js";
 import { applyRecordPolicyMigration, planRecordPolicyMigration } from "./record-policy.js";
 import {
@@ -468,6 +469,11 @@ function cmdReplayScores() {
   console.log(JSON.stringify(inspectScoreReplay(config.jobsDir)));
 }
 
+/** 只读本地聚合指标；不会显示职位、材料或完整链接。 */
+function cmdMetrics() {
+  console.log(JSON.stringify(collectJobMetrics(config.jobsDir), null, 2));
+}
+
 /** 打印本次 API 用量与预估成本;没调用过 API 就不打印 */
 function printUsage() {
   const u = usageSummary();
@@ -504,6 +510,7 @@ try {
     case "confirm-ready": cmdConfirmReady(args); break;
     case "override-ready": cmdOverrideReady(args); break;
     case "replay-scores": cmdReplayScores(); break;
+    case "metrics": cmdMetrics(); break;
     default:
       console.log(`求职助手 (M1 命令行版)
 
@@ -514,6 +521,7 @@ try {
   node src/cli.js score <job-id>    (重新)打分:改了 target/profile 后重打,不必重跑 add
   node src/cli.js gen <job-id>      生成定制简历 + cover letter(自动事实核查;skip 岗位走海投模式)
   node src/cli.js replay-scores     只读汇总旧/新评分结构；不读取 JD 或材料
+  node src/cli.js metrics           只读本地聚合指标；不显示职位或材料内容
   node src/cli.js genall [--force]  批量生成所有已打分但缺材料的职位(--force 全部重生成)
   node src/cli.js export [job-id]   把简历+cover letter 导出为 PDF/docx;不带参数则导出全部
   node src/cli.js report [job-id]   (重新)生成 match-report.md;不带参数则全部重生成

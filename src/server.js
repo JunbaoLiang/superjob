@@ -19,6 +19,7 @@ import { dashboardHTML } from "./dashboard.js";
 import { config } from "./config.js";
 import { assessMaterialReadiness, confirmMaterialReadiness, overrideMaterialReadiness } from "./material-readiness.js";
 import { BatchImportQueue, prepareBatchCapture } from "./batch-import.js";
+import { collectJobMetrics } from "./metrics.js";
 
 function loadToken() {
   const file = path.join(config.root, ".capture-token");
@@ -195,6 +196,10 @@ function makeHandler(port, token) {
           hasResume: hasJobFile(id, "resume.md"), readiness: job.material_readiness?.state || null };
       });
       sendJSON(res, 200, cors, jobs); return;
+    }
+
+    if (req.method === "GET" && p === "/api/metrics") {
+      sendJSON(res, 200, cors, collectJobMetrics(config.jobsDir)); return;
     }
 
     if (req.method === "GET" && p === "/api/capture-queue") {
