@@ -24,13 +24,21 @@ const validJob = {
 };
 
 const validScore = {
-  score: 72,
-  verdict: "worth_applying",
-  rationale: ["技能匹配。"],
-  hard_blockers: [],
-  gaps: ["缺少行业经验，可通过研究项目说明。"],
-  strengths: ["有相关建模经历。"],
-  resume_angle: "突出科学机器学习。",
+  eligibility: {
+    verdict: "eligible",
+    hard_blockers: [],
+    risks: [],
+    checks: ["岗位未列出与当前授权冲突的明确限制。"],
+  },
+  match: {
+    score: 76,
+    verdict: "worth_applying",
+    rationale: ["技能匹配。"],
+    gaps: ["缺少行业经验，可通过研究项目说明。"],
+    strengths: ["有相关建模经历。"],
+    resume_angle: "突出科学机器学习。",
+  },
+  recommendation: "main_target",
 };
 
 const validIssue = {
@@ -61,14 +69,22 @@ test("extract output rejects missing identifiers, invalid enums, and invalid arr
   assert.throws(() => validateExtractOutput({ ...validJob, required_skills: [1] }), /required_skills/);
 });
 
-test("score output rejects invalid ranges, verdicts, arrays, and blocker conflicts", () => {
-  assert.equal(validateScoreOutput(validScore).score, 72);
-  assert.throws(() => validateScoreOutput({ ...validScore, score: 72.5 }), /score/);
-  assert.throws(() => validateScoreOutput({ ...validScore, verdict: "maybe" }), /verdict/);
-  assert.throws(() => validateScoreOutput({ ...validScore, rationale: "not an array" }), /rationale/);
+test("score output separates eligibility from match and rejects conflicting decisions", () => {
+  assert.equal(validateScoreOutput(validScore).match.score, 76);
+  assert.throws(() => validateScoreOutput({ ...validScore, match: { ...validScore.match, score: 72.5 } }), /score/);
+  assert.throws(() => validateScoreOutput({ ...validScore, eligibility: { ...validScore.eligibility, verdict: "maybe" } }), /eligibility.*verdict/);
+  assert.throws(() => validateScoreOutput({ ...validScore, match: { ...validScore.match, rationale: "not an array" } }), /rationale/);
   assert.throws(
-    () => validateScoreOutput({ ...validScore, hard_blockers: ["clearance required"] }),
-    /hard_blockers.*skip/,
+    () => validateScoreOutput({ ...validScore, eligibility: { ...validScore.eligibility, hard_blockers: ["公民身份要求"] } }),
+    /eligible.*hard_blockers/,
+  );
+  assert.throws(
+    () => validateScoreOutput({ ...validScore, eligibility: { verdict: "needs-verification", hard_blockers: [], risks: [], checks: ["签证未说明"] }, recommendation: "verify" }),
+    /risks/,
+  );
+  assert.throws(
+    () => validateScoreOutput({ ...validScore, eligibility: { verdict: "needs-verification", hard_blockers: [], risks: ["sponsorship 未说明"], checks: ["需核实"] }, recommendation: "skip" }),
+    /recommendation.*verify/,
   );
 });
 

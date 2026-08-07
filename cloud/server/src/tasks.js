@@ -2,6 +2,7 @@
 // 本地版用 SSE 推进度;云端(Render 代理后)改为把进度行写进 tasks.progress,前端轮询。
 import { q } from "./db.js";
 import { extractJob, scoreJob, generateMaterials } from "./pipeline.js";
+import { scoreView, shouldAutoSkip } from "./score-policy.js";
 import { resetUsage, usageSummary } from "./llm.js";
 import { setStatus, STATUSES } from "./jobs.js";
 import { writeMatchReport } from "./report.js";
@@ -64,10 +65,10 @@ function formatUsageCost(usage) {
     : `成本待配置(${usage.provider}/${usage.model})`;
 }
 
-/** 打分并按 skip 自动设状态 */
+/** 打分后仅按明确 ineligible 自动设状态 */
 async function scoreAndStatus(jobId) {
   const score = await scoreJob(jobId);
-  if (score.verdict === "skip") await setStatus(jobId, "skip");
+  if (shouldAutoSkip(score)) await setStatus(jobId, "skip");
   await writeMatchReport(jobId);
   return score;
 }
@@ -86,7 +87,8 @@ async function runTask(t) {
     await log(`✔ ${result.job.company} — ${result.job.title},打分中…`);
     const score = await scoreAndStatus(result.jobId);
     const us = usageSummary();
-    await log(`✅ ${score.score} 分 [${score.verdict}] · ${formatUsageCost(us)}`);
+    const view = scoreView(score);
+    await log(`✅ ${view.match.score} 分 [${view.match.verdict} · ${view.eligibility}] · ${formatUsageCost(us)}`);
     return { jobId: result.jobId, company: result.job.company, title: result.job.title, score };
   }
 

@@ -81,12 +81,15 @@ iframe.pdf{width:100%;height:70vh;border:1px solid var(--line);border-radius:10p
 <script>
 var STATUS={"new":"🆕 待定","to-apply":"📮 待投","applied":"✅ 已投","interview":"🎤 面试中","offer":"🎉 Offer","rejected":"❌ 已拒","skip":"🚫 不投"};
 var ORDER=["new","to-apply","applied","interview","offer","rejected","skip"];
-var VERDICT={strong_match:"强匹配",worth_applying:"值得投",stretch:"够得着",skip:"匹配低"};
+var VERDICT={strong_match:"强匹配",worth_applying:"值得投",stretch:"够得着",low_match:"低匹配",skip:"旧版低匹配"};
+var ELIGIBILITY={eligible:"可申请","needs-verification":"待核实",ineligible:"明确不符合"};
+var RECOMMENDATION={main_target:"主投",mass_apply:"海投",stretch:"Stretch",verify:"先核实",skip:"跳过"};
 var READINESS={"not-generated":"未生成",draft:"待确认","needs-review":"需复核",ready:"已就绪"};
 var curTab="report", curId=null, dragId=null, gQueue="";
 
 function api(p){return fetch(p).then(function(r){return r.json()});}
 function esc(s){return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function scoreView(s){if(!s||!s.match)return {legacy:true,match:s||{},hard_blockers:(s&&s.hard_blockers)||[],risks:[],eligibility:null,recommendation:null};return {legacy:false,match:s.match,hard_blockers:s.eligibility.hard_blockers,risks:s.eligibility.risks,eligibility:s.eligibility.verdict,recommendation:s.recommendation};}
 
 /* —— 看板 —— */
 function loadBoard(){
@@ -154,9 +157,12 @@ function renderDetail(d){
   }
   h+='</div>';
   if(s){
-    h+='<div class=sec><h3>评分 '+s.score+' / 100 · '+(VERDICT[s.verdict]||s.verdict)+'</h3>';
-    if(s.rationale&&s.rationale.length){h+='<ul class=tight>';s.rationale.forEach(function(r){h+='<li>'+esc(r)+'</li>';});h+='</ul>';}
-    if(s.hard_blockers&&s.hard_blockers.length){h+='<div style="color:#b4472f;margin-top:6px">⛔ '+s.hard_blockers.map(esc).join("<br>⛔ ")+'</div>';}
+    var sv=scoreView(s);
+    h+='<div class=sec><h3>'+(sv.legacy?"旧版评分":"Eligibility "+(ELIGIBILITY[sv.eligibility]||sv.eligibility)+" · "+(RECOMMENDATION[sv.recommendation]||sv.recommendation))+'</h3>';
+    h+='<p><span class=pill>Match '+sv.match.score+' / 100 · '+(VERDICT[sv.match.verdict]||sv.match.verdict||"未知")+'</span></p>';
+    if(sv.match.rationale&&sv.match.rationale.length){h+='<ul class=tight>';sv.match.rationale.forEach(function(r){h+='<li>'+esc(r)+'</li>';});h+='</ul>';}
+    if(sv.risks.length){h+='<div style="color:#b0730e;margin-top:6px">⚠️ 待核实：'+sv.risks.map(esc).join("<br>⚠️ ")+'</div>';}
+    if(sv.hard_blockers.length){h+='<div style="color:#b4472f;margin-top:6px">⛔ '+sv.hard_blockers.map(esc).join("<br>⛔ ")+'</div>';}
     h+='</div>';
   }else{
     // 只解析未打分(连抓时可能撞限流)——一键补分
@@ -173,7 +179,9 @@ function renderDetail(d){
       +'<button id=t_cover class="'+(curTab==="cover"?"on":"")+'" onclick="showTab(\\'cover\\')">Cover letter</button>'
       +'</div><div id=view></div>';
   }else{
-    h+='<p class=meta>还没生成材料。'+(s&&s.verdict==="skip"?"评分 skip;仍想海投可点下面(走海投模式)。":"")+'</p>'
+    var sv2=scoreView(s);
+    if(sv2.eligibility==="ineligible") h+='<p class=meta>存在明确 eligibility hard block，不能生成材料。</p>';
+    else h+='<p class=meta>还没生成材料。'+(sv2.recommendation==="stretch"?"Stretch 岗位，需由你手动确认后生成。":sv2.recommendation==="verify"?"请先核实风险；如仍决定投入，可手动生成。":"")+'</p>'
       +'<button id=genbtn onclick="generate()">生成材料(简历 + Cover letter)</button><div class=prog id=prog></div>';
   }
   h+='</div>';

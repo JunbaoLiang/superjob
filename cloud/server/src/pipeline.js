@@ -6,6 +6,7 @@ import { makeJobId, insertJob, getJob, saveFields } from "./jobs.js";
 import { writeMatchReport } from "./report.js";
 import { exportJob, renderResumePdfPages } from "./export.js";
 import { recordPolicyFor, refreshActiveMaterialReadiness } from "./material-readiness.js";
+import { assertCanGenerateMaterials, scoreView, usesMassApplyAngle } from "./score-policy.js";
 import {
   factCheckNeedsReview,
   validateExtractOutput,
@@ -139,9 +140,11 @@ export async function generateMaterials(jobId, { onProgress = () => {} } = {}) {
   }
   if (!row.score) throw new Error("该职位还没打分");
   const score = row.score;
+  assertCanGenerateMaterials(score);
+  const view = scoreView(score);
   const preferences = await loadProfile("preferences");
   const jobJson = JSON.stringify(row.job, null, 2);
-  const massApply = score.verdict === "skip";
+  const massApply = usesMassApplyAngle(score);
 
   // 1. 定制简历
   const resumePrompt = fill(loadPrompt("resume"), {
@@ -149,7 +152,7 @@ export async function generateMaterials(jobId, { onProgress = () => {} } = {}) {
     JOB_JSON: jobJson,
     RESUME_ANGLE: massApply
       ? MASS_APPLY_ANGLE
-      : score.resume_angle || "突出与该职位最相关的经历",
+      : view.match.resume_angle || "突出与该职位最相关的经历",
     PREFERENCES: preferences,
   });
   let resume = await ask(resumePrompt, { maxTokens: 8000 });

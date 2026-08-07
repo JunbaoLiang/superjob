@@ -91,8 +91,8 @@ export async function deleteJob(id) {
 export async function listJobs() {
   const { rows } = await q(`
     SELECT id, status, company, title,
-           score->>'score'   AS score,
-           score->>'verdict' AS verdict,
+           COALESCE(score->'match'->>'score', score->>'score') AS score,
+           COALESCE(score->'match'->>'verdict', score->>'verdict') AS verdict,
            (resume_md IS NOT NULL) AS has_resume,
            material_readiness->>'state' AS readiness,
            captured_at

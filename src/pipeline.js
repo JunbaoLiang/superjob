@@ -5,6 +5,7 @@ import { writeMatchReport } from "./report.js";
 import { exportJob, renderResumePdfPages } from "./export.js";
 import { recordPolicyFor } from "./record-policy.js";
 import { assertActiveMaterialRecord, refreshActiveMaterialReadiness } from "./material-readiness.js";
+import { assertCanGenerateMaterials, scoreView, usesMassApplyAngle } from "./score-policy.js";
 import {
   factCheckNeedsReview,
   validateExtractOutput,
@@ -134,16 +135,18 @@ async function factCheckCover(coverLetter) {
 
 /**
  * 功能三:生成定制简历 + 自动事实核查/修正 + cover letter
- * skip 岗位自动切换海投角度。onProgress(step, detail) 用于 CLI 打印进度。
+ * mass_apply 岗位自动切换海投角度。onProgress(step, detail) 用于 CLI 打印进度。
  * 返回 { resume, coverLetter, factCheck, massApply }
  */
 export async function generateMaterials(jobId, { onProgress = () => {} } = {}) {
   const job = loadJobFile(jobId, "job.json");
   assertActiveMaterialRecord(job);
   const score = loadJobFile(jobId, "score.json");
+  assertCanGenerateMaterials(score);
+  const view = scoreView(score);
   const preferences = loadProfile("preferences");
   const jobJson = JSON.stringify(job, null, 2);
-  const massApply = score.verdict === "skip";
+  const massApply = usesMassApplyAngle(score);
 
   // 1. 定制简历
   const resumePrompt = fill(loadPrompt("resume"), {
@@ -151,7 +154,7 @@ export async function generateMaterials(jobId, { onProgress = () => {} } = {}) {
     JOB_JSON: jobJson,
     RESUME_ANGLE: massApply
       ? MASS_APPLY_ANGLE
-      : score.resume_angle || "突出与该职位最相关的经历",
+      : view.match.resume_angle || "突出与该职位最相关的经历",
     PREFERENCES: preferences,
   });
   let resume = await ask(resumePrompt, { maxTokens: 8000 });

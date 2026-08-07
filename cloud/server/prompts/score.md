@@ -42,32 +42,43 @@
 {{RAW_TEXT}}
 """
 
-## 打分标准
+## 先判断 Eligibility（是否可申请）
 
-1. **硬性条件核对(先做,占 40%)**:逐条核对签证/工作许可、地点、硬性技能、年限要求。命中我目标文件里「绝对不考虑」的任何一条 → 直接判 skip,score 不超过 25。
-2. **软性匹配度(占 40%)**:我的经历与职责的相关度、技能重合度、级别匹配度。
-3. **隐性优势(占 20%)**:我的背景里有没有 JD 没明说但明显加分的点(研究方向契合、同领域项目、地域联系等)。
+逐条核对工作授权/签证、国籍或安全许可、学历、时间、地点和 JD 的明确硬要求。候选人的档案是唯一事实来源；不得把计划申请 NIW 写成当前工作授权或雇主 sponsorship 的替代品。
 
-## 建议分数段
+- JD **明确**要求候选人当前不具备的公民身份、安全许可、工作授权、时间或其他即时条件时，`ineligible`，并把 JD 原文依据写入 `hard_blockers`。
+- JD 对 sponsorship/工作授权**未说明**、措辞含糊，或需要招聘方确认时，`needs-verification`；写入 `risks`，绝不写入 `hard_blockers`，绝不因此给 `skip`。
+- 只有明确无冲突时才为 `eligible`。实习与全职按档案中确认的 CPT/OPT、毕业时间和可入职窗口分别判断，不得自行推断额外资格。
 
-- 85-100 strong_match:硬条件全过,核心技能高度重合,应优先投递
-- 65-84  worth_applying:硬条件过,有 1-2 个可弥补的 gap
-- 40-64  stretch:够得着但明显吃力,时间富余再投
-- 0-39   skip:有硬伤或严重不匹配
+## 再判断 Match（实际匹配）
+
+只看真实经历与职责、技能、研究领域和级别的匹配；不要把 Eligibility 风险偷偷扣进 Match 分数。
+
+- 85-100 `strong_match`
+- 65-84 `worth_applying`
+- 40-64 `stretch`
+- 0-39 `low_match`
+
+对于 `eligible`：Match ≥75 为 `main_target`；60-74 为 `mass_apply`；40-59 为 `stretch`；0-39 为 `skip`。对于 `needs-verification`，recommendation 必须为 `verify`；对于 `ineligible`，必须为 `skip`。stretch 只建议用户手动决定是否生成材料。
 
 只返回一个 JSON 对象(不要 markdown 围栏、不要解释):
 
 {
-  "score": 0-100 的整数,
-  "verdict": "strong_match | worth_applying | stretch | skip",
-  "rationale": ["为什么是这个分数——2 到 4 条,每条一句话、直击要点"],
-  "hard_blockers": ["命中的一票否决项,无则为空数组"],
-  "gaps": ["缺少 XX 经验(可通过 YY 项目弥补)——每条都要附上能否弥补及怎么弥补"],
-  "strengths": ["我的优势点,具体到简历里的哪段经历"],
-  "resume_angle": "如果投递,简历应该主打的角度,一句话"
+  "eligibility": {
+    "verdict": "eligible | needs-verification | ineligible",
+    "hard_blockers": ["仅 JD 明确的即时不符合项；否则为空数组"],
+    "risks": ["需要核实的未知项；否则为空数组"],
+    "checks": ["2-5 条简短、基于 JD 与档案事实的核对依据"]
+  },
+  "match": {
+    "score": "0-100 的整数",
+    "verdict": "strong_match | worth_applying | stretch | low_match",
+    "rationale": ["2-4 条一句话摘要"],
+    "gaps": ["缺少 XX 经验；说明能否及如何弥补"],
+    "strengths": ["具体到主简历的真实经历"],
+    "resume_angle": "若投递，简历应主打的真实角度，一句话"
+  },
+  "recommendation": "main_target | mass_apply | stretch | verify | skip"
 }
 
-规则:
-- hard_blockers 非空时 verdict 必须是 skip。
-- rationale 是给我快速扫一眼的「打分理由摘要」:2-4 条短 bullet,概括决定这个分数的关键因素(既包括拉高分的也包括压低分的),每条不超过一行,不要展开细节(细节放 gaps/strengths)。
-- rationale、gaps、strengths 都用中文写,方便我快速读。
+所有 rationale、gaps、strengths、checks、risks 和 hard_blockers 都用中文写，方便快速核对。

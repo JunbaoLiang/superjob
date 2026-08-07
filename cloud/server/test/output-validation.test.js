@@ -24,13 +24,16 @@ const validJob = {
 };
 
 const validScore = {
-  score: 72,
-  verdict: "worth_applying",
-  rationale: ["技能匹配。"],
-  hard_blockers: [],
-  gaps: [],
-  strengths: ["有相关建模经历。"],
-  resume_angle: "突出科学机器学习。",
+  eligibility: { verdict: "eligible", hard_blockers: [], risks: [], checks: ["未见明确限制。"] },
+  match: {
+    score: 72,
+    verdict: "worth_applying",
+    rationale: ["技能匹配。"],
+    gaps: [],
+    strengths: ["有相关建模经历。"],
+    resume_angle: "突出科学机器学习。",
+  },
+  recommendation: "mass_apply",
 };
 
 const validOutreach = {
@@ -40,12 +43,12 @@ const validOutreach = {
   message: "Hello, I am interested in this role and would welcome a brief conversation.",
 };
 
-test("cloud accepts only complete extract and score outputs", () => {
+test("cloud accepts only complete extract and split score outputs", () => {
   assert.equal(validateExtractOutput(validJob).title, "Applied Scientist");
   assert.throws(() => validateExtractOutput({ ...validJob, visa_sponsorship: "maybe" }), /visa_sponsorship/);
-  assert.equal(validateScoreOutput(validScore).verdict, "worth_applying");
-  assert.throws(() => validateScoreOutput({ ...validScore, score: 101 }), /score/);
-  assert.throws(() => validateScoreOutput({ ...validScore, hard_blockers: ["citizenship"] }), /skip/);
+  assert.equal(validateScoreOutput(validScore).match.verdict, "worth_applying");
+  assert.throws(() => validateScoreOutput({ ...validScore, match: { ...validScore.match, score: 101 } }), /score/);
+  assert.throws(() => validateScoreOutput({ ...validScore, eligibility: { ...validScore.eligibility, hard_blockers: ["citizenship"] } }), /eligible.*hard_blockers/);
 });
 
 test("cloud fact-check failures become needs-review rather than clean", () => {

@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { extractJob, scoreJob, generateMaterials, generateOutreach } from "./pipeline.js";
+import { scoreView, shouldAutoSkip } from "./score-policy.js";
 import { usageSummary, resetUsage } from "./llm.js";
 import {
   setStatus, STATUSES, jobStatus, listJobs, loadJobFile, hasJobFile, jobDir, resolveJobId, deleteJob,
@@ -68,10 +69,10 @@ function readBody(req, limit = 2_000_000) {
   });
 }
 
-/** 打分并按 skip 自动设状态,返回最终 jobId */
+/** 打分后仅按明确 ineligible 自动设状态,返回最终 jobId */
 async function scoreAndStatus(jobId) {
   const score = await scoreJob(jobId);
-  const finalId = score.verdict === "skip" ? setStatus(jobId, "skip") : jobId;
+  const finalId = shouldAutoSkip(score) ? setStatus(jobId, "skip") : jobId;
   writeMatchReport(finalId);
   return { finalId, score };
 }
@@ -93,7 +94,8 @@ async function processQueue() {
       const result = await extractJob(text, { pageTitle: title || "", pageUrl: url || "" });
       if (result.error) { console.log(`✖ 未识别为职位: ${result.reason || result.error}`); continue; }
       const { finalId, score } = await scoreAndStatus(result.jobId);
-      console.log(`✔ ${result.job.company} — ${result.job.title} [${score.score} ${score.verdict}] ${STATUSES[jobStatus(finalId)]} (剩 ${captureQueue.length})`);
+      const view = scoreView(score);
+      console.log(`✔ ${result.job.company} — ${result.job.title} [${view.match.score} ${view.match.verdict} · ${view.eligibility || "legacy"}] ${STATUSES[jobStatus(finalId)]} (剩 ${captureQueue.length})`);
     } catch (e) {
       console.error(`capture 处理出错(该岗可能只解析未打分,面板里点「打分」补): ${e.message}`);
     }
@@ -185,7 +187,7 @@ function makeHandler(port, token) {
         let job = {}; try { job = loadJobFile(id, "job.json"); } catch { /* skip */ }
         const score = hasJobFile(id, "score.json") ? loadJobFile(id, "score.json") : null;
         return { id, company: job.company, title: job.title, status: jobStatus(id),
-          score: score ? score.score : null, verdict: score ? score.verdict : null,
+          score: scoreView(score)?.match.score ?? null, verdict: scoreView(score)?.match.verdict ?? null,
           hasResume: hasJobFile(id, "resume.md"), readiness: job.material_readiness?.state || null };
       });
       sendJSON(res, 200, cors, jobs); return;

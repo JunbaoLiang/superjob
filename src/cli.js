@@ -16,6 +16,8 @@ import { writeMatchReport } from "./report.js";
 import { exportJob } from "./export.js";
 import { startServer } from "./server.js";
 import { config } from "./config.js";
+import { canAutoGenerateMaterials, scoreView, shouldAutoSkip, usesMassApplyAngle } from "./score-policy.js";
+import { inspectScoreReplay } from "./score-replay.js";
 import { applyRecordPolicyMigration, planRecordPolicyMigration } from "./record-policy.js";
 import {
   applyReadinessInitialization,
@@ -33,29 +35,42 @@ const VERDICT_LABEL = {
   strong_match: "🟢 strong_match(优先投)",
   worth_applying: "🟡 worth_applying(值得投)",
   stretch: "🟠 stretch(够得着但吃力)",
-  skip: "🔴 skip(跳过,可海投)",
+  low_match: "🔴 low_match(低匹配)",
+};
+const ELIGIBILITY_LABEL = {
+  eligible: "可申请",
+  "needs-verification": "待核实",
+  ineligible: "明确不符合",
+};
+const RECOMMENDATION_LABEL = {
+  main_target: "主投", mass_apply: "海投", stretch: "stretch(需手动生成)", verify: "先核实", skip: "跳过",
 };
 
 function printScore(id, score) {
+  const view = scoreView(score);
   console.log(`\n━━━ ${id} ━━━`);
-  console.log(`分数:${score.score}  ${VERDICT_LABEL[score.verdict] || score.verdict}`);
-  if (score.rationale?.length) {
+  if (view.legacy) console.log("⚠️ 旧版评分记录(只读显示；请勿自动重写历史材料)");
+  console.log(`Eligibility:${ELIGIBILITY_LABEL[view.eligibility] || view.eligibility || "旧版未知"} · 建议:${RECOMMENDATION_LABEL[view.recommendation] || view.recommendation || "旧版"}`);
+  console.log(`Match:${view.match.score}  ${VERDICT_LABEL[view.match.verdict] || view.match.verdict}`);
+  if (view.checks?.length) console.log(`\n🔎 Eligibility 核对:\n${view.checks.map((x) => `   • ${x}`).join("\n")}`);
+  if (view.risks?.length) console.log(`\n⚠️  待核实:\n${view.risks.map((x) => `   - ${x}`).join("\n")}`);
+  if (view.match.rationale?.length) {
     console.log(`\n📌 打分理由:`);
-    score.rationale.forEach((r) => console.log(`   • ${r}`));
+    view.match.rationale.forEach((r) => console.log(`   • ${r}`));
   }
-  if (score.hard_blockers?.length) {
+  if (view.hard_blockers?.length) {
     console.log(`\n⛔ 一票否决:`);
-    score.hard_blockers.forEach((b) => console.log(`   - ${b}`));
+    view.hard_blockers.forEach((b) => console.log(`   - ${b}`));
   }
-  if (score.gaps?.length) {
+  if (view.match.gaps?.length) {
     console.log(`\n⚠️  Gaps:`);
-    score.gaps.forEach((g) => console.log(`   - ${g}`));
+    view.match.gaps.forEach((g) => console.log(`   - ${g}`));
   }
-  if (score.strengths?.length) {
+  if (view.match.strengths?.length) {
     console.log(`\n💪 优势:`);
-    score.strengths.forEach((s) => console.log(`   - ${s}`));
+    view.match.strengths.forEach((s) => console.log(`   - ${s}`));
   }
-  if (score.resume_angle) console.log(`\n🎯 简历角度:${score.resume_angle}`);
+  if (view.match.resume_angle) console.log(`\n🎯 简历角度:${view.match.resume_angle}`);
 }
 
 async function cmdAdd(args) {
@@ -82,17 +97,18 @@ async function cmdAdd(args) {
 
   console.log("② 匹配打分中...");
   const score = await scoreJob(jobId);
-  // 初始投递状态:skip 直接标「不投」,其余留「待定」等你决定
-  const curId = score.verdict === "skip" ? setStatus(jobId, "skip") : jobId;
+  // 只有明确不符合才自动标「不投」；未知 sponsorship 等风险保留给用户核实。
+  const curId = shouldAutoSkip(score) ? setStatus(jobId, "skip") : jobId;
   writeMatchReport(curId);
   printScore(curId, score);
   console.log(`\n📁 目录: ${curId}  [${STATUSES[jobStatus(curId)]}]`);
   console.log(`📋 匹配报告: ${path.join(jobDir(curId), "match-report.md")}`);
 
-  if (score.verdict === "skip") {
-    console.log(`该职位匹配度低;如仍想海投,可跑: node src/cli.js gen ${curId}`);
+  if (shouldAutoSkip(score)) {
+    console.log(`该职位存在明确 eligibility hard block，已标为不投。`);
   } else {
-    console.log(`下一步生成投递材料: node src/cli.js gen ${curId}`);
+    const view = scoreView(score);
+    console.log(view.recommendation === "stretch" ? `stretch 岗位；如决定投入时间，可手动生成材料: node src/cli.js gen ${curId}` : `下一步生成投递材料: node src/cli.js gen ${curId}`);
     console.log(`投出去后标记状态: node src/cli.js status ${curId} applied`);
   }
 }
@@ -100,8 +116,8 @@ async function cmdAdd(args) {
 /** 生成单个职位的材料,带进度输出;供 gen 和 genall 共用 */
 async function generateOne(jobId) {
   const score = loadJobFile(jobId, "score.json");
-  if (score.verdict === "skip") {
-    console.log(`ℹ️  该职位评分为 skip,启用海投模式:忽略打分角度,突出可迁移技能生成通用材料`);
+  if (usesMassApplyAngle(score)) {
+    console.log(`ℹ️  海投模式:突出可迁移技能生成通用但可信的材料`);
   }
   console.log(`① 生成定制简历中...`);
   const result = await generateMaterials(jobId, {
@@ -171,7 +187,7 @@ async function cmdScore(args) {
   console.log(`\n📋 匹配报告: ${path.join(jobDir(jobId), "match-report.md")}`);
   if (existed && hasJobFile(jobId, "resume.md")) {
     console.log(`⚠️ 该职位已生成过材料;打分/角度可能变了,需要的话重新生成: node src/cli.js gen ${jobId}`);
-  } else if (score.verdict !== "skip") {
+  } else if (!shouldAutoSkip(score)) {
     console.log(`下一步生成投递材料: node src/cli.js gen ${jobId}`);
   }
 }
@@ -229,9 +245,10 @@ async function cmdGen(args) {
 async function cmdGenAll(args) {
   const force = args.includes("--force");
   const scored = listJobs().filter((id) => hasJobFile(id, "score.json"));
-  const todo = force ? scored : scored.filter((id) => !hasJobFile(id, "resume.md"));
+  const candidates = force ? scored : scored.filter((id) => !hasJobFile(id, "resume.md"));
+  const todo = candidates.filter((id) => canAutoGenerateMaterials(loadJobFile(id, "score.json")));
   if (!todo.length) {
-    console.log("没有待生成的职位(已全部生成过;用 --force 强制全部重新生成)");
+    console.log("没有可自动批量生成的主投/海投职位；stretch 与待核实岗位需手动运行 gen。");
     return;
   }
   console.log(`共 ${todo.length} 个职位待生成:`);
@@ -295,7 +312,8 @@ function cmdList() {
     let score = "";
     if (hasJobFile(id, "score.json")) {
       const s = loadJobFile(id, "score.json");
-      score = `[${s.score} ${s.verdict}]`;
+      const view = scoreView(s);
+      score = `[${view.match.score} ${view.match.verdict}${view.eligibility ? ` · ${view.eligibility}` : " · legacy"}]`;
     }
     const mat = hasJobFile(id, "resume.md") ? "📄" : "  ";
     console.log(`${status}  ${mat} ${score.padEnd(22)} ${id}`);
@@ -414,6 +432,11 @@ function cmdOverrideReady(args) {
   console.log("✅ 已记录带理由的 readiness override；现在允许标记为 applied。");
 }
 
+/** 只读评分盘点：不读取 JD/材料，不调用模型，不写任何文件。 */
+function cmdReplayScores() {
+  console.log(JSON.stringify(inspectScoreReplay(config.jobsDir)));
+}
+
 /** 打印本次 API 用量与预估成本;没调用过 API 就不打印 */
 function printUsage() {
   const u = usageSummary();
@@ -448,6 +471,7 @@ try {
     case "plan-material-readiness": cmdPlanReadiness(args); break;
     case "confirm-ready": cmdConfirmReady(args); break;
     case "override-ready": cmdOverrideReady(args); break;
+    case "replay-scores": cmdReplayScores(); break;
     default:
       console.log(`求职助手 (M1 命令行版)
 
@@ -456,6 +480,7 @@ try {
   node src/cli.js add - --url <链接>  可选附上职位链接
   node src/cli.js score <job-id>    (重新)打分:改了 target/profile 后重打,不必重跑 add
   node src/cli.js gen <job-id>      生成定制简历 + cover letter(自动事实核查;skip 岗位走海投模式)
+  node src/cli.js replay-scores     只读汇总旧/新评分结构；不读取 JD 或材料
   node src/cli.js genall [--force]  批量生成所有已打分但缺材料的职位(--force 全部重生成)
   node src/cli.js export [job-id]   把简历+cover letter 导出为 PDF/docx;不带参数则导出全部
   node src/cli.js report [job-id]   (重新)生成 match-report.md;不带参数则全部重生成

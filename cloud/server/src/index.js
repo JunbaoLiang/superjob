@@ -9,6 +9,7 @@ import { editFileColumn, readFilePolicy } from "./file-policy.js";
 import { initDb } from "./db.js";
 import { startWorker, enqueue, getTask, queueState } from "./tasks.js";
 import { scoreJob, generateOutreach } from "./pipeline.js";
+import { shouldAutoSkip } from "./score-policy.js";
 import { resetUsage, usageSummary } from "./llm.js";
 import {
   listJobs, getJob, resolveJobId, setStatus, deleteJob, saveFields, getFile, listFiles, STATUSES,
@@ -44,10 +45,10 @@ const FILE_TYPES = {
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
-/** 打分并按 skip 自动设状态(与任务工人里的逻辑一致) */
+/** 打分后仅按明确 ineligible 自动设状态(与任务工人里的逻辑一致) */
 async function scoreAndStatus(jobId) {
   const score = await scoreJob(jobId);
-  if (score.verdict === "skip") await setStatus(jobId, "skip");
+  if (shouldAutoSkip(score)) await setStatus(jobId, "skip");
   await writeMatchReport(jobId);
   return score;
 }

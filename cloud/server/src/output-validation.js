@@ -1,6 +1,8 @@
 const REMOTE_POLICIES = new Set(["onsite", "hybrid", "remote", "unspecified"]);
 const VISA_SPONSORSHIP = new Set(["supported", "not_supported", "unspecified"]);
-const SCORE_VERDICTS = new Set(["strong_match", "worth_applying", "stretch", "skip"]);
+const MATCH_VERDICTS = new Set(["strong_match", "worth_applying", "stretch", "low_match"]);
+const ELIGIBILITY_VERDICTS = new Set(["eligible", "needs-verification", "ineligible"]);
+const RECOMMENDATIONS = new Set(["main_target", "mass_apply", "stretch", "verify", "skip"]);
 const FACT_CHECK_VERDICTS = new Set(["clean", "issues"]);
 const ISSUE_TYPES = new Set(["fabrication", "exaggeration"]);
 
@@ -33,6 +35,7 @@ function enumValue(value, name, allowed) {
   return value;
 }
 
+/** 校验职位提取 Prompt 的两种明确分支：无职位，或完整职位对象。 */
 export function validateExtractOutput(value) {
   const output = object(value, "职位提取输出");
   if (output.error !== null && output.error !== undefined) {
@@ -55,23 +58,47 @@ export function validateExtractOutput(value) {
   return output;
 }
 
+/** 校验评分 Prompt 的数值、枚举和 blocker 一致性。 */
 export function validateScoreOutput(value) {
   const output = object(value, "评分输出");
-  if (!Number.isInteger(output.score) || output.score < 0 || output.score > 100) {
+  const eligibility = object(output.eligibility, "eligibility");
+  const match = object(output.match, "match");
+  enumValue(eligibility.verdict, "eligibility.verdict", ELIGIBILITY_VERDICTS);
+  stringArray(eligibility.hard_blockers, "eligibility.hard_blockers");
+  stringArray(eligibility.risks, "eligibility.risks");
+  stringArray(eligibility.checks, "eligibility.checks", { min: 1 });
+  if (!Number.isInteger(match.score) || match.score < 0 || match.score > 100) {
     throw new Error("score 必须是 0 到 100 的整数。");
   }
-  enumValue(output.verdict, "verdict", SCORE_VERDICTS);
-  stringArray(output.rationale, "rationale", { min: 1 });
-  stringArray(output.hard_blockers, "hard_blockers");
-  stringArray(output.gaps, "gaps");
-  stringArray(output.strengths, "strengths");
-  nonEmptyString(output.resume_angle, "resume_angle");
-  if (output.hard_blockers.length && output.verdict !== "skip") {
-    throw new Error("hard_blockers 非空时 verdict 必须是 skip。");
+  enumValue(match.verdict, "match.verdict", MATCH_VERDICTS);
+  stringArray(match.rationale, "match.rationale", { min: 1 });
+  stringArray(match.gaps, "match.gaps");
+  stringArray(match.strengths, "match.strengths");
+  nonEmptyString(match.resume_angle, "match.resume_angle");
+  enumValue(output.recommendation, "recommendation", RECOMMENDATIONS);
+  const bands = {
+    strong_match: match.score >= 85,
+    worth_applying: match.score >= 65 && match.score <= 84,
+    stretch: match.score >= 40 && match.score <= 64,
+    low_match: match.score <= 39,
+  };
+  if (!bands[match.verdict]) throw new Error("match.verdict 与 score 分数段不一致。");
+  if (eligibility.verdict === "ineligible") {
+    if (!eligibility.hard_blockers.length) throw new Error("eligibility.ineligible 必须包含 hard_blockers。");
+    if (output.recommendation !== "skip") throw new Error("eligibility.ineligible 的 recommendation 必须是 skip。");
+  } else if (eligibility.verdict === "needs-verification") {
+    if (eligibility.hard_blockers.length) throw new Error("needs-verification 不得包含 hard_blockers。");
+    if (!eligibility.risks.length) throw new Error("needs-verification 必须包含 risks。");
+    if (output.recommendation !== "verify") throw new Error("needs-verification 的 recommendation 必须是 verify。");
+  } else {
+    if (eligibility.hard_blockers.length || eligibility.risks.length) throw new Error("eligible 不得包含 hard_blockers 或 risks。");
+    const expected = match.score >= 75 ? "main_target" : match.score >= 60 ? "mass_apply" : match.verdict === "stretch" ? "stretch" : "skip";
+    if (output.recommendation !== expected) throw new Error(`eligible 的 recommendation 必须是 ${expected}。`);
   }
   return output;
 }
 
+/** 校验简历/求职信事实核查的明确、可修正问题。 */
 export function validateFactCheckOutput(value) {
   const output = object(value, "事实核查输出");
   enumValue(output.verdict, "verdict", FACT_CHECK_VERDICTS);
@@ -92,6 +119,7 @@ export function validateFactCheckOutput(value) {
   return output;
 }
 
+/** 校验外联内容，确保 note 压缩与持久化只处理完整结果。 */
 export function validateOutreachOutput(value) {
   const output = object(value, "外联输出");
   stringArray(output.who, "who", { min: 1 });
@@ -101,6 +129,7 @@ export function validateOutreachOutput(value) {
   return output;
 }
 
+/** 解析或 schema 失败时的保守事实核查结果；绝不附带模型原文。 */
 export function factCheckNeedsReview() {
   return {
     verdict: "needs-review",

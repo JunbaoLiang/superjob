@@ -1,12 +1,15 @@
 // 把 job / score / fact_check 汇总成人类可读的 match-report.md(纯模板渲染,不调 API)
 import { getJob, saveFields, STATUSES } from "./jobs.js";
+import { scoreView, usesMassApplyAngle } from "./score-policy.js";
 
 const VERDICT_CN = {
   strong_match: "🟢 强匹配(优先投)",
   worth_applying: "🟡 值得投",
   stretch: "🟠 够得着但吃力",
-  skip: "🔴 匹配度低(仅海投)",
+  low_match: "🔴 匹配度低",
 };
+const ELIGIBILITY_CN = { eligible: "可申请", "needs-verification": "待核实", ineligible: "明确不符合" };
+const RECOMMENDATION_CN = { main_target: "主投", mass_apply: "海投", stretch: "Stretch（需手动生成）", verify: "先核实", skip: "跳过" };
 
 function section(lines, title, items) {
   if (!items?.length) return;
@@ -37,17 +40,21 @@ export function buildMatchReport(row) {
   lines.push("");
 
   if (score) {
-    lines.push(`## 评分:${score.score} / 100 — ${VERDICT_CN[score.verdict] || score.verdict}`, "");
-    if (score.rationale?.length) {
+    const view = scoreView(score);
+    lines.push(view.legacy ? "> ⚠️ 旧版评分记录，仅供历史参考。" : `## Eligibility：${ELIGIBILITY_CN[view.eligibility] || view.eligibility} · 建议：${RECOMMENDATION_CN[view.recommendation] || view.recommendation}`, "");
+    lines.push(`## Match：${view.match.score} / 100 — ${VERDICT_CN[view.match.verdict] || view.match.verdict}`, "");
+    section(lines, "🔎 Eligibility 核对", view.checks);
+    section(lines, "⚠️ 待核实风险", view.risks);
+    if (view.match.rationale?.length) {
       lines.push("**打分理由:**", "");
-      score.rationale.forEach((r) => lines.push(`- ${r}`));
+      view.match.rationale.forEach((r) => lines.push(`- ${r}`));
       lines.push("");
     }
-    section(lines, "⛔ 一票否决", score.hard_blockers);
-    section(lines, "💪 优势", score.strengths);
-    section(lines, "⚠️ 差距", score.gaps);
-    if (score.resume_angle) {
-      lines.push("### 🎯 简历主打角度", "", score.resume_angle, "");
+    section(lines, "⛔ 一票否决", view.hard_blockers);
+    section(lines, "💪 优势", view.match.strengths);
+    section(lines, "⚠️ 差距", view.match.gaps);
+    if (view.match.resume_angle) {
+      lines.push("### 🎯 简历主打角度", "", view.match.resume_angle, "");
     }
   } else {
     lines.push("## 评分", "", "(尚未打分)", "");
@@ -55,7 +62,7 @@ export function buildMatchReport(row) {
 
   lines.push("## 投递材料", "");
   const hasResume = !!row.resume_md;
-  const massApply = score?.verdict === "skip" && hasResume;
+  const massApply = usesMassApplyAngle(score) && hasResume;
   lines.push(hasResume
     ? `- ✅ 定制简历:\`resume.md\`${massApply ? "(海投模式:突出可迁移技能的通用版)" : ""}`
     : "- ⬜ 定制简历:未生成");
