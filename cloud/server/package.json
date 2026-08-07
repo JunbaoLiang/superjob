@@ -6,13 +6,15 @@
   "private": true,
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
+    "openai": "^7.4.0",
     "pg": "^8.13.1"
   }
 }

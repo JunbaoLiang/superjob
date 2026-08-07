@@ -1,6 +1,6 @@
 // 核心流水线:解析 JD → 打分 → 生成材料(事实核查 + 一页压缩)→ 外联建议。
 // 与本地版逻辑一致,存储从文件目录换成 Postgres。
-import { ask, askJSON } from "./claude.js";
+import { ask, askJSON } from "./llm.js";
 import { loadPrompt, fill, loadProfile } from "./prompts.js";
 import { makeJobId, insertJob, getJob, saveFields } from "./jobs.js";
 import { writeMatchReport } from "./report.js";

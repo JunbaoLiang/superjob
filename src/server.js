@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { extractJob, scoreJob, generateMaterials, generateOutreach } from "./pipeline.js";
-import { usageSummary, resetUsage } from "./claude.js";
+import { usageSummary, resetUsage } from "./llm.js";
 import {
   setStatus, STATUSES, jobStatus, listJobs, loadJobFile, hasJobFile, jobDir, resolveJobId, deleteJob,
 } from "./jobs.js";
@@ -50,6 +50,12 @@ function localOrigin(origin, port) {
 function sendJSON(res, status, headers, obj) {
   res.writeHead(status, { ...headers, "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(obj));
+}
+
+function formatUsageCost(usage) {
+  return Number.isFinite(usage.estUSD)
+    ? `本次约 $${usage.estUSD.toFixed(3)}`
+    : `成本待配置(${usage.provider}/${usage.model})`;
 }
 
 function readBody(req, limit = 2_000_000) {
@@ -262,7 +268,7 @@ function makeHandler(port, token) {
           sse({ log: "开始生成…" });
           await generateMaterials(id, { onProgress: (step, detail) => { const l = progressLine(step, detail); if (l) sse({ log: l }); } });
           const us = usageSummary();
-          sse({ log: "✅ 完成 · 本次约 $" + us.estUSD.toFixed(3) });
+          sse({ log: "✅ 完成 · " + formatUsageCost(us) });
           sse({ done: true });
         } catch (e) { sse({ error: e.message }); }
         res.end();

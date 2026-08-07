@@ -42,7 +42,7 @@ if [ ! -d "$DIR/node_modules" ]; then
 fi
 if [ ! -f "$DIR/.env" ]; then
   cp "$DIR/.env.example" "$DIR/.env"
-  echo "⚠️  还没有 .env。已为你创建,请在打开的文件里填 ANTHROPIC_API_KEY,保存后重新双击本脚本"
+  echo "⚠️  还没有 .env。已为你创建,请在打开的文件里填 LLM_PROVIDER、LLM_MODEL 和对应 API key,保存后重新双击本脚本"
   open -t "$DIR/.env" 2>/dev/null || true
   finish 1
 fi

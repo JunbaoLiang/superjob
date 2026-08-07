@@ -14,7 +14,7 @@ Vercel 上的网页面板 ──────┘            │
 
 ---
 
-## 第 0 步:把代码推上 GitHub(私有仓库,一次性)
+## 第 0 步:把代码推上 GitHub(一次性)
 
 ```bash
 cd ~/Documents/superjob
@@ -23,7 +23,7 @@ git add -A
 git commit -m "Job Copilot:本地版 + 云端版"
 ```
 
-去 https://github.com/new 建一个 **Private** 仓库(比如叫 `superjob`),然后:
+去 https://github.com/new 建一个仓库(公开或私有均可；本项目当前使用公开仓库),然后:
 
 ```bash
 git remote add origin git@github.com:你的用户名/superjob.git
@@ -52,9 +52,12 @@ git add render.yaml && git commit -m "render blueprint" && git push
 
 1. https://render.com 用 GitHub 登录 →「New +」→「**Blueprint**」→ 选你的 `superjob` 仓库。
 2. Render 会读到根目录的 `render.yaml`,列出 `job-copilot-api` 服务。点「Apply」。
-3. 它会提示填两个环境变量:
+3. 在服务页的 Environment 设置下列变量:
    - `DATABASE_URL` → 粘贴第 1 步的 Neon 连接串
-   - `ANTHROPIC_API_KEY` → 你的 Claude API key(和本地 `.env` 里同一个)
+   - `LLM_PROVIDER` → `anthropic` 或 `openai`
+   - `LLM_MODEL` → 与 provider 对应的模型 ID
+   - 若 `LLM_PROVIDER=anthropic`：`ANTHROPIC_API_KEY` → Claude API key
+   - 若 `LLM_PROVIDER=openai`：`OPENAI_API_KEY` → OpenAI API key
    - `APP_TOKEN` 会自动生成——这是你的**访问口令**,面板和扩展都要用它。
 4. 等构建完成(镜像里装 TeX,首次约 5-10 分钟;之后每次 push 自动重新部署,快很多)。
 5. 记下两样东西:
@@ -114,7 +117,7 @@ DATABASE_URL="粘贴 Neon 连接串" node migrate.js
 | 面板/扩展提示连不上 | 免费版冷启动约 1 分钟,稍等重试;仍不行看 Render 服务页的 Logs |
 | 401 未授权 | 口令和 Render 环境变量 APP_TOKEN 不一致,重新复制 |
 | PDF 字体不对 | Render 构建日志里搜 XCharter,若下载失败点「Manual Deploy → Clear build cache & deploy」重来 |
-| 想换模型 | Render → Environment → 改 ANTHROPIC_MODEL(如 claude-opus-4-8),保存自动重启 |
+| 想换模型或 Provider | Render → Environment → 成对修改 `LLM_PROVIDER` 与 `LLM_MODEL`；确认对应的 provider key 已设置后保存自动重启 |
 | 改了 prompts/ 或模板 | 提交并 push,Render 自动重新部署(prompts 打包在镜像里) |
 | Neon 免费额度 | 0.5GB 存储;PDF 都存库里,几百个岗位没问题;不够就删旧岗位 |
 | 安全性 | API 只认 APP_TOKEN;泄露了就在 Render 里改一个新值,面板/扩展同步更新 |

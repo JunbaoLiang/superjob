@@ -12,7 +12,8 @@ try {
 
 export const config = {
   root: ROOT,
-  model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
+  llmProvider: (process.env.LLM_PROVIDER || "").trim().toLowerCase(),
+  llmModel: (process.env.LLM_MODEL || "").trim(),
   port: Number(process.env.SUPERJOB_PORT) || 8787, // 本地抓取服务端口(与 Chrome 扩展里的端口保持一致)
   dataDir: path.join(ROOT, "data"),
   profileDir: path.join(ROOT, "data", "profile"),

@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { extractJob, scoreJob, generateMaterials, generateOutreach } from "./pipeline.js";
-import { usageSummary } from "./claude.js";
+import { usageSummary } from "./llm.js";
 import { writeMatchReport } from "./report.js";
 import { exportJob } from "./export.js";
 import { startServer } from "./server.js";
@@ -327,8 +327,10 @@ function getFlag(args, name) {
 function printUsage() {
   const u = usageSummary();
   if (!u.calls) return;
-  const cost = u.estUSD < 0.01 ? `<$0.01` : `$${u.estUSD.toFixed(3)}`;
-  const priced = u.priceKnown ? "" : `(按 sonnet 价格估算,模型 ${u.model} 无内置价格)`;
+  const cost = Number.isFinite(u.estUSD)
+    ? (u.estUSD < 0.01 ? "<$0.01" : `$${u.estUSD.toFixed(3)}`)
+    : "待配置";
+  const priced = u.priceKnown ? "" : `(模型 ${u.provider}/${u.model} 无内置价格)`;
   console.log(
     `\n💰 本次 API:${u.calls} 次调用,${u.inputTokens.toLocaleString()} in + ` +
     `${u.outputTokens.toLocaleString()} out tokens,约 ${cost} ${priced}`

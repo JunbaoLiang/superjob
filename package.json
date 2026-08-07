@@ -16,6 +16,7 @@
     "node": ">=20.12"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "latest"
+    "@anthropic-ai/sdk": "latest",
+    "openai": "^7.4.0"
   }
 }

@@ -1,4 +1,4 @@
-import { ask, askJSON } from "./claude.js";
+import { ask, askJSON } from "./llm.js";
 import { loadPrompt, fill, loadProfile } from "./prompts.js";
 import { makeJobId, saveJobFile, loadJobFile } from "./jobs.js";
 import { writeMatchReport } from "./report.js";

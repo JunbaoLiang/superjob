@@ -2,7 +2,7 @@
 // 本地版用 SSE 推进度;云端(Render 代理后)改为把进度行写进 tasks.progress,前端轮询。
 import { q } from "./db.js";
 import { extractJob, scoreJob, generateMaterials } from "./pipeline.js";
-import { resetUsage, usageSummary } from "./claude.js";
+import { resetUsage, usageSummary } from "./llm.js";
 import { setStatus, STATUSES } from "./jobs.js";
 import { writeMatchReport } from "./report.js";
 import { exportJob } from "./export.js";
@@ -58,6 +58,12 @@ function progressLine(step, detail) {
   }
 }
 
+function formatUsageCost(usage) {
+  return Number.isFinite(usage.estUSD)
+    ? `本次约 $${usage.estUSD.toFixed(3)}`
+    : `成本待配置(${usage.provider}/${usage.model})`;
+}
+
 /** 打分并按 skip 自动设状态 */
 async function scoreAndStatus(jobId) {
   const score = await scoreJob(jobId);
@@ -80,7 +86,7 @@ async function runTask(t) {
     await log(`✔ ${result.job.company} — ${result.job.title},打分中…`);
     const score = await scoreAndStatus(result.jobId);
     const us = usageSummary();
-    await log(`✅ ${score.score} 分 [${score.verdict}] · 本次约 $${us.estUSD.toFixed(3)}`);
+    await log(`✅ ${score.score} 分 [${score.verdict}] · ${formatUsageCost(us)}`);
     return { jobId: result.jobId, company: result.job.company, title: result.job.title, score };
   }
 
@@ -93,7 +99,7 @@ async function runTask(t) {
       },
     });
     const us = usageSummary();
-    await log(`✅ 完成 · 本次约 $${us.estUSD.toFixed(3)}`);
+    await log(`✅ 完成 · ${formatUsageCost(us)}`);
     return { jobId: t.job_id };
   }
 

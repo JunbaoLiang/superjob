@@ -6,7 +6,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const config = {
   root: ROOT,
   port: Number(process.env.PORT) || 8787, // Render 会注入 PORT
-  model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
+  llmProvider: (process.env.LLM_PROVIDER || "").trim().toLowerCase(),
+  llmModel: (process.env.LLM_MODEL || "").trim(),
   token: process.env.APP_TOKEN || "",     // 访问口令:所有 /api/* 与 /capture 都要带
   databaseUrl: process.env.DATABASE_URL || "",
   promptsDir: path.join(ROOT, "prompts"),

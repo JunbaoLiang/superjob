@@ -10,9 +10,9 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
       - key: APP_TOKEN
         generateValue: true
-      - key: ANTHROPIC_MODEL
+      - key: LLM_PROVIDER
+        value: anthropic
+      - key: LLM_MODEL
         value: claude-sonnet-4-6

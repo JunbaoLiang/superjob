@@ -24,7 +24,7 @@
 **双击项目里的 `安装.command`**,它会自动完成:
 
 1. 定位 Node(兼容 homebrew / nvm)并在缺依赖时 `npm install`
-2. 没有 `.env` 时创建并打开它让你填 `ANTHROPIC_API_KEY`(从 https://platform.claude.com 控制台创建)
+2. 没有 `.env` 时创建并打开它；填写 `LLM_PROVIDER`、`LLM_MODEL`，以及该 provider 对应的 API key
 3. 注册 macOS 开机自启后台服务(launchd,崩溃自动拉起,日志在 `data/server.log`)
 4. 安装全局 `job` 命令(终端里 `job list` 即可,不用再打 `node src/cli.js ...`)
 5. 打开浏览器面板 http://127.0.0.1:8787/
@@ -91,7 +91,7 @@ job rm <job-id>             # 删除误抓/重复的职位
 
 **事实核查**:简历和 cover letter 都会对照主简历自动查「关于我」的虚构/过度拉伸并修正(cover letter 只查关于我的陈述,忽略对公司/动机的描述);改不动的存疑项在 match-report 里标出。
 
-**成本可见**:每次用到 API 的命令结束会打印本次调用次数、token 数和预估美元成本(单价在 `src/claude.js` 的 `PRICING` 里,换模型/调价改这里)。
+**成本可见**:每次用到 API 的命令结束会打印本次调用次数、token 数和预估美元成本(单价在 `src/llm.js` 的 `PRICING` 里；未知模型不会用错误费率估算)。
 
 **投递状态**:每个岗位目录名形如 `公司-岗位-状态`;状态即申请进度,`add` 后 skip 自动标 `skip`、其余为 `new`,用状态下拉或 `job status` 推进。可选值:`new`(待定) `to-apply`(待投) `applied`(已投) `interview`(面试) `offer` `rejected` `skip`(不投)。
 

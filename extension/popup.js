@@ -78,7 +78,11 @@ function renderResult(data) {
   next.innerHTML = score.verdict === "skip"
     ? `已标记「不投」。想海投就点上方「打开面板」→ 选中它 → 生成材料。`
     : `已落盘。点上方「打开面板」→ 选中它 → 一键生成简历 + cover letter。`;
-  const costLine = usage ? `  · 本次约 $${usage.estUSD.toFixed(3)}` : "";
+  const costLine = usage
+    ? (Number.isFinite(usage.estUSD)
+      ? `  · 本次约 $${usage.estUSD.toFixed(3)}`
+      : `  · 成本待配置(${usage.provider}/${usage.model})`)
+    : "";
   setStatus(`✅ 已抓取并打分${costLine}`);
   $("result").hidden = false;
 }

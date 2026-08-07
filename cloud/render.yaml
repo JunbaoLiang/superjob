@@ -11,9 +11,9 @@ services:
     envVars:
       - key: DATABASE_URL        # Neon 连接串,创建 Neon 项目后粘贴
         sync: false
-      - key: ANTHROPIC_API_KEY   # Claude API key
-        sync: false
       - key: APP_TOKEN           # 访问口令,自动生成;面板和扩展里要填同一个
         generateValue: true
-      - key: ANTHROPIC_MODEL
+      - key: LLM_PROVIDER
+        value: anthropic
+      - key: LLM_MODEL
         value: claude-sonnet-4-6
