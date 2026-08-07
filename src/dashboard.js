@@ -286,14 +286,16 @@ function scoreJob(){ if(!curId)return; var id=curId;
 }
 
 /* —— 材料预览:简历/CL 默认内嵌 PDF,可切文字版 —— */
+function downloadName(pref,ext){return (pref==="cover-letter"?"coverletter":"resume")+"."+ext;}
 function showTab(tab){
   if(["report","resume","cover"].indexOf(tab)<0) tab="report"; curTab=tab; var id=curId;
   ["report","resume","cover"].forEach(function(t){var b=document.getElementById("t_"+t);if(b)b.className=(t===tab?"on":"");});
   var view=document.getElementById("view"); if(!view) return;
   if(tab==="report"){ fetch("/api/file?id="+encodeURIComponent(id)+"&name=match-report.md").then(function(r){return r.text()}).then(function(md){ view.innerHTML='<div class=viewer>'+mdToHtml(md)+'</div>'; }); return; }
   var pref=tab==="resume"?"resume":"cover-letter", base="/api/file?id="+encodeURIComponent(id)+"&name=";
+  var pdf=base+pref+".pdf&download=1", docx=base+pref+".docx&download=1";
   view.innerHTML='<div class=links><a onclick="matView(\\''+pref+'\\',\\'pdf\\')">PDF 预览</a><a onclick="matView(\\''+pref+'\\',\\'md\\')">文字版</a>'
-    +'<a href="'+base+pref+'.pdf" target=_blank>新标签打开 ↗</a><a href="'+base+pref+'.pdf" download>下载 PDF</a><a href="'+base+pref+'.docx" download>下载 .docx</a></div><div id=matbody></div>';
+    +'<a href="'+base+pref+'.pdf" target=_blank>新标签打开 ↗</a><a href="'+pdf+'" download="'+downloadName(pref,"pdf")+'">下载 PDF</a><a href="'+docx+'" download="'+downloadName(pref,"docx")+'">下载 .docx</a></div><div id=matbody></div>';
   matView(pref,"pdf");
 }
 function matView(pref,mode){ var box=document.getElementById("matbody"); if(!box)return; var base="/api/file?id="+encodeURIComponent(curId)+"&name=";

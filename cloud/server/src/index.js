@@ -46,6 +46,10 @@ const FILE_TYPES = {
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
+function downloadName(name) {
+  return name.replace(/^cover-letter\./, "coverletter.");
+}
+
 /** 打分后仅按明确 ineligible 自动设状态(与任务工人里的逻辑一致) */
 async function scoreAndStatus(jobId) {
   const score = await scoreJob(jobId);
@@ -129,7 +133,9 @@ async function handle(req, res) {
       const buf = await getFile(id, name);
       if (!buf) { sendJSON(res, 404, { error: "文件不存在(可能还没导出)" }); return; }
       const ext = name.slice(name.lastIndexOf("."));
-      res.writeHead(200, { ...CORS, "Content-Type": FILE_TYPES[ext] || "application/octet-stream" });
+      const headers = { ...CORS, "Content-Type": FILE_TYPES[ext] || "application/octet-stream" };
+      if (u.searchParams.get("download") === "1") headers["Content-Disposition"] = `attachment; filename="${downloadName(name)}"`;
+      res.writeHead(200, headers);
       res.end(buf);
       return;
     }

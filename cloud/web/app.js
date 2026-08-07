@@ -52,11 +52,14 @@ async function fileUrl(id, name) {
   blobCache[key] = URL.createObjectURL(b);
   return blobCache[key];
 }
+function downloadName(name) {
+  return name.replace(/^cover-letter\./, "coverletter.");
+}
 async function downloadFile(id, name) {
   const url = await fileUrl(id, name);
   if (!url) { alert("文件不存在(可能还没导出)"); return; }
   const a = document.createElement("a");
-  a.href = url; a.download = id + "-" + name;
+  a.href = url; a.download = downloadName(name);
   document.body.appendChild(a); a.click(); a.remove();
 }
 

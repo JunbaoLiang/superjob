@@ -150,6 +150,10 @@ const FILE_TYPES = {
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
+function downloadName(name) {
+  return name.replace(/^cover-letter\./, "coverletter.");
+}
+
 function makeHandler(port, token) {
  return function handler(req, res) {
   const origin = req.headers.origin;
@@ -251,7 +255,9 @@ function makeHandler(port, token) {
         if (!/^[\w.-]+$/.test(name)) { sendJSON(res, 400, cors, { error: "非法文件名" }); return; }
         const file = path.join(jobDir(id), name);
         if (!file.startsWith(jobDir(id)) || !fs.existsSync(file)) { sendJSON(res, 404, cors, { error: "文件不存在" }); return; }
-        res.writeHead(200, { ...cors, "Content-Type": FILE_TYPES[path.extname(name)] || "application/octet-stream" });
+        const headers = { ...cors, "Content-Type": FILE_TYPES[path.extname(name)] || "application/octet-stream" };
+        if (u.searchParams.get("download") === "1") headers["Content-Disposition"] = `attachment; filename="${downloadName(name)}"`;
+        res.writeHead(200, headers);
         fs.createReadStream(file).pipe(res);
       } catch (e) { sendJSON(res, 404, cors, { error: e.message }); }
       return;
