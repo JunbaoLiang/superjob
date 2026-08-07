@@ -82,6 +82,41 @@ export function parseBatchInput(value) {
     });
 }
 
+/**
+ * Validate a batch before it reaches extraction/scoring. This deliberately does not fetch URLs:
+ * a URL without JD text is reported to the caller rather than becoming a misleading successful task.
+ */
+export function prepareBatchCapture(items, existing = []) {
+  if (!Array.isArray(items)) throw new Error("batch items must be an array");
+  const results = [];
+  const summary = { accepted: 0, duplicates: 0, rejected: 0, possible_duplicates: 0 };
+  for (const input of items) {
+    const text = typeof input?.text === "string" ? input.text.trim() : "";
+    const url = typeof input?.url === "string" ? input.url.trim() : "";
+    if (!text) {
+      results.push({ kind: "rejected", error: url ? "URL-only batch items need the corresponding JD text; use the browser capture for that page." : "A batch item needs JD text." });
+      summary.rejected++;
+      continue;
+    }
+    if (text.length < 50) {
+      results.push({ kind: "rejected", error: "JD text is too short to capture safely." });
+      summary.rejected++;
+      continue;
+    }
+    const duplicate = classifyDuplicate({ url }, existing);
+    if (duplicate.kind === "duplicate") {
+      results.push(duplicate);
+      summary.duplicates++;
+      continue;
+    }
+    const payload = { text, url, title: typeof input?.title === "string" ? input.title.slice(0, 500) : "" };
+    results.push(duplicate.kind === "possible-duplicate" ? { kind: "accepted", payload, possible_duplicate_ids: duplicate.ids } : { kind: "accepted", payload });
+    summary.accepted++;
+    if (duplicate.kind === "possible-duplicate") summary.possible_duplicates++;
+  }
+  return { items: results, summary };
+}
+
 /** In-memory serial queue. Integration layers decide how a queued input becomes a job. */
 export class BatchImportQueue {
   #worker;

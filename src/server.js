@@ -18,6 +18,7 @@ import { writeMatchReport } from "./report.js";
 import { dashboardHTML } from "./dashboard.js";
 import { config } from "./config.js";
 import { assessMaterialReadiness, confirmMaterialReadiness, overrideMaterialReadiness } from "./material-readiness.js";
+import { BatchImportQueue, prepareBatchCapture } from "./batch-import.js";
 
 function loadToken() {
   const file = path.join(config.root, ".capture-token");
@@ -78,29 +79,32 @@ async function scoreAndStatus(jobId) {
 }
 
 // —— 抓取队列:提交即走,后台逐个处理(一次只跑一个,避免并发撞 API 限流)——
-const captureQueue = [];
-let processing = false;
-function enqueueCapture(body) {
-  captureQueue.push(body);
-  processQueue();
-  return captureQueue.length; // 排队位置
+const captureQueue = new BatchImportQueue(async ({ payload }) => {
+  const { text, url, title } = payload;
+  const result = await extractJob(text, { pageTitle: title || "", pageUrl: url || "" });
+  if (result.error) throw new Error(`未识别为职位: ${result.reason || result.error}`);
+  const { finalId, score } = await scoreAndStatus(result.jobId);
+  const view = scoreView(score);
+  console.log(`✔ ${result.job.company} — ${result.job.title} [${view.match.score} ${view.match.verdict} · ${view.eligibility || "legacy"}] ${STATUSES[jobStatus(finalId)]}`);
+  return { jobId: finalId };
+});
+
+function captureQueueState() {
+  const items = captureQueue.list();
+  return {
+    queue: items.filter((item) => item.state === "queued").length,
+    processing: items.some((item) => item.state === "running"),
+  };
 }
-async function processQueue() {
-  if (processing) return;
-  processing = true;
-  while (captureQueue.length) {
-    const { text, url, title } = captureQueue.shift();
-    try {
-      const result = await extractJob(text, { pageTitle: title || "", pageUrl: url || "" });
-      if (result.error) { console.log(`✖ 未识别为职位: ${result.reason || result.error}`); continue; }
-      const { finalId, score } = await scoreAndStatus(result.jobId);
-      const view = scoreView(score);
-      console.log(`✔ ${result.job.company} — ${result.job.title} [${view.match.score} ${view.match.verdict} · ${view.eligibility || "legacy"}] ${STATUSES[jobStatus(finalId)]} (剩 ${captureQueue.length})`);
-    } catch (e) {
-      console.error(`capture 处理出错(该岗可能只解析未打分,面板里点「打分」补): ${e.message}`);
-    }
-  }
-  processing = false;
+
+function visibleCaptureQueue() {
+  return captureQueue.list().map(({ id, state, attempts, error, result }) => ({ id, state, attempts, error, result }));
+}
+
+function enqueueCapture(body) {
+  const [item] = captureQueue.enqueueMany([body]);
+  void captureQueue.drain();
+  return { id: item.id, queued: captureQueueState().queue };
 }
 
 /** 把 generateMaterials 的进度事件转成给面板看的一行中文 */
@@ -154,7 +158,7 @@ function makeHandler(port, token) {
   if (req.method === "OPTIONS") { res.writeHead(204, cors); res.end(); return; }
 
   // —— 页面 ——
-  if (req.method === "GET" && p === "/health") { sendJSON(res, 200, cors, { ok: true, port, queue: captureQueue.length, processing }); return; }
+  if (req.method === "GET" && p === "/health") { sendJSON(res, 200, cors, { ok: true, port, ...captureQueueState() }); return; }
   if (req.method === "GET" && p === "/") {
     res.writeHead(200, { ...cors, "Content-Type": "text/html; charset=utf-8" });
     res.end(dashboardHTML()); return;
@@ -171,8 +175,8 @@ function makeHandler(port, token) {
         const body = JSON.parse((await readBody(req)) || "{}");
         if (!captureAllowed(origin, body.token, token)) { sendJSON(res, 403, cors, { error: "未授权" }); return; }
         if (!body.text || body.text.trim().length < 50) { sendJSON(res, 400, cors, { error: "页面内容太短,可能不是招聘页" }); return; }
-        const pos = enqueueCapture(body);   // 入队,立刻返回,后台逐个处理
-        sendJSON(res, 200, cors, { accepted: true, queued: pos });
+        const queued = enqueueCapture(body);   // 入队,立刻返回,后台逐个处理
+        sendJSON(res, 200, cors, { accepted: true, queued: queued.queued, taskId: queued.id });
       } catch (err) { console.error(`capture 出错: ${err.message}`); sendJSON(res, 500, cors, { error: err.message }); }
     })();
     return;
@@ -191,6 +195,30 @@ function makeHandler(port, token) {
           hasResume: hasJobFile(id, "resume.md"), readiness: job.material_readiness?.state || null };
       });
       sendJSON(res, 200, cors, jobs); return;
+    }
+
+    if (req.method === "GET" && p === "/api/capture-queue") {
+      sendJSON(res, 200, cors, { ...captureQueueState(), items: visibleCaptureQueue() }); return;
+    }
+
+    if (req.method === "POST" && p === "/api/import/batch") {
+      (async () => {
+        try {
+          const body = JSON.parse((await readBody(req)) || "{}");
+          const existing = listJobs().map((id) => {
+            const job = loadJobFile(id, "job.json");
+            return { id, url: job.url, company: job.company, title: job.title, location: job.location };
+          });
+          const prepared = prepareBatchCapture(body.items, existing);
+          const items = prepared.items.map((entry) => {
+            if (entry.kind !== "accepted") return entry;
+            const queued = enqueueCapture(entry.payload);
+            return { kind: "accepted", taskId: queued.id, possible_duplicate_ids: entry.possible_duplicate_ids || [] };
+          });
+          sendJSON(res, 200, cors, { summary: prepared.summary, items, queue: captureQueueState() });
+        } catch (e) { sendJSON(res, 400, cors, { error: e.message }); }
+      })();
+      return;
     }
 
     if (req.method === "GET" && p === "/api/job") {

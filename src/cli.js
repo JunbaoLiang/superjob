@@ -18,6 +18,7 @@ import { startServer } from "./server.js";
 import { config } from "./config.js";
 import { canAutoGenerateMaterials, scoreView, shouldAutoSkip, usesMassApplyAngle } from "./score-policy.js";
 import { inspectScoreReplay } from "./score-replay.js";
+import { parseBatchInput, prepareBatchCapture } from "./batch-import.js";
 import { applyRecordPolicyMigration, planRecordPolicyMigration } from "./record-policy.js";
 import {
   applyReadinessInitialization,
@@ -110,6 +111,36 @@ async function cmdAdd(args) {
     const view = scoreView(score);
     console.log(view.recommendation === "stretch" ? `stretch 岗位；如决定投入时间，可手动生成材料: node src/cli.js gen ${curId}` : `下一步生成投递材料: node src/cli.js gen ${curId}`);
     console.log(`投出去后标记状态: node src/cli.js status ${curId} applied`);
+  }
+}
+
+/** 批量 JD 导入：只接收已粘贴的 JD；不会抓取 URL、申请岗位或生成材料。 */
+async function cmdBatch(args) {
+  const src = args[0];
+  if (!src) throw new Error("用法: node src/cli.js batch <batch.txt> 或 pbpaste | node src/cli.js batch -");
+  const raw = src === "-" ? fs.readFileSync(0, "utf8") : fs.readFileSync(src, "utf8");
+  const inputs = parseBatchInput(raw).map((item) => item.kind === "text" ? { text: item.text } : { url: item.url });
+  const existing = listJobs().map((id) => {
+    const job = loadJobFile(id, "job.json");
+    return { id, url: job.url, company: job.company, title: job.title, location: job.location };
+  });
+  const prepared = prepareBatchCapture(inputs, existing);
+  console.log(`批量预检: ${prepared.summary.accepted} 个待处理，${prepared.summary.duplicates} 个重复，${prepared.summary.rejected} 个拒绝。`);
+  for (const [index, entry] of prepared.items.entries()) {
+    if (entry.kind !== "accepted") console.log(`  #${index + 1} ${entry.kind}: ${entry.error || entry.id || ""}`);
+  }
+  for (const entry of prepared.items) {
+    if (entry.kind !== "accepted") continue;
+    const result = await extractJob(entry.payload.text, { pageUrl: entry.payload.url, pageTitle: entry.payload.title });
+    if (result.error) { console.log(`  ✖ 未识别为职位: ${result.reason || result.error}`); continue; }
+    const { finalId, score } = await (async () => {
+      const score = await scoreJob(result.jobId);
+      const finalId = shouldAutoSkip(score) ? setStatus(result.jobId, "skip") : result.jobId;
+      writeMatchReport(finalId);
+      return { finalId, score };
+    })();
+    const view = scoreView(score);
+    console.log(`  ✔ ${finalId}: ${view.match.score} ${view.match.verdict} · ${view.eligibility}`);
   }
 }
 
@@ -455,6 +486,7 @@ const [cmd, ...args] = process.argv.slice(2);
 try {
   switch (cmd) {
     case "add":    await cmdAdd(args); break;
+    case "batch":  await cmdBatch(args); break;
     case "score":  await cmdScore(args); break;
     case "status": cmdStatus(args); break;
     case "outreach": await cmdOutreach(args); break;
@@ -478,6 +510,7 @@ try {
 用法:
   node src/cli.js add <jd.txt>      解析 JD 并打分(文件或 - 读 stdin)
   node src/cli.js add - --url <链接>  可选附上职位链接
+  node src/cli.js batch <batch.txt>  批量导入以空行分隔的 JD；- 从剪贴板/标准输入读取
   node src/cli.js score <job-id>    (重新)打分:改了 target/profile 后重打,不必重跑 add
   node src/cli.js gen <job-id>      生成定制简历 + cover letter(自动事实核查;skip 岗位走海投模式)
   node src/cli.js replay-scores     只读汇总旧/新评分结构；不读取 JD 或材料

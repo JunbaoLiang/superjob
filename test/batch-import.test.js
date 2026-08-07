@@ -5,6 +5,7 @@ import {
   classifyDuplicate,
   normalizeJobUrl,
   parseBatchInput,
+  prepareBatchCapture,
 } from "../src/batch-import.js";
 
 test("batch input parses URLs and JD blocks without retaining blank items", () => {
@@ -68,4 +69,18 @@ test("batch queue exposes failures, continues, and only retries when requested",
   await queue.drain();
   assert.equal(queue.get(first.id).state, "succeeded");
   assert.equal(queue.get(first.id).attempts, 2);
+});
+
+test("batch capture preparation rejects URL-only input and exact duplicates before any model work", () => {
+  const prepared = prepareBatchCapture([
+    { text: "A valid fixture JD with enough content to pass the local capture threshold and be queued safely.", url: "https://jobs.example.com/new" },
+    { text: "Another valid fixture JD with enough content to pass the local capture threshold and be rejected as duplicate.", url: "https://jobs.example.com/existing?utm_source=x" },
+    { url: "https://jobs.example.com/url-only" },
+    { text: "too short" },
+  ], [{ id: "existing", url: "https://jobs.example.com/existing" }]);
+  assert.deepEqual(prepared.summary, { accepted: 1, duplicates: 1, rejected: 2, possible_duplicates: 0 });
+  assert.equal(prepared.items[0].kind, "accepted");
+  assert.deepEqual(prepared.items[1], { kind: "duplicate", match: "url", id: "existing" });
+  assert.match(prepared.items[2].error, /URL-only/);
+  assert.match(prepared.items[3].error, /too short/);
 });
