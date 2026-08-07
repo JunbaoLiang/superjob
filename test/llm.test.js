@@ -1,0 +1,51 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createLlm } from "../src/llm.js";
+
+test("Anthropic adapter sends Messages request and records usage", async () => {
+  let request;
+  const anthropic = { messages: { create: async (input) => {
+    request = input;
+    return { content: [{ type: "text", text: "anthropic reply" }], usage: { input_tokens: 12, output_tokens: 7 } };
+  } } };
+  const llm = createLlm({
+    provider: "anthropic",
+    model: "claude-sonnet-4-6",
+    env: { ANTHROPIC_API_KEY: "test-key" },
+    clients: { anthropic },
+  });
+  assert.equal(await llm.ask("hello", { maxTokens: 123 }), "anthropic reply");
+  assert.deepEqual(request, {
+    model: "claude-sonnet-4-6", max_tokens: 123, messages: [{ role: "user", content: "hello" }],
+  });
+  assert.deepEqual(llm.usageSummary(), {
+    calls: 1, inputTokens: 12, outputTokens: 7, provider: "anthropic", model: "claude-sonnet-4-6",
+    estUSD: 0.000141, priceKnown: true,
+  });
+});
+
+test("OpenAI adapter sends Responses request and records usage", async () => {
+  let request;
+  const openai = { responses: { create: async (input) => {
+    request = input;
+    return { status: "completed", output_text: "openai reply", usage: { input_tokens: 12, output_tokens: 7 } };
+  } } };
+  const llm = createLlm({
+    provider: "openai",
+    model: "gpt-5.6-terra",
+    env: { OPENAI_API_KEY: "test-key" },
+    clients: { openai },
+  });
+  assert.equal(await llm.ask("hello", { maxTokens: 123 }), "openai reply");
+  assert.deepEqual(request, { model: "gpt-5.6-terra", input: "hello", max_output_tokens: 123 });
+  assert.deepEqual(llm.usageSummary(), {
+    calls: 1, inputTokens: 12, outputTokens: 7, provider: "openai", model: "gpt-5.6-terra",
+    estUSD: 0.000135, priceKnown: true,
+  });
+});
+
+test("LLM configuration fails clearly before any provider call", async () => {
+  await assert.rejects(createLlm({ provider: "other", model: "x", env: {} }).ask("hello"), /LLM_PROVIDER/);
+  await assert.rejects(createLlm({ provider: "openai", model: "", env: {} }).ask("hello"), /LLM_MODEL/);
+  await assert.rejects(createLlm({ provider: "openai", model: "gpt-test", env: {} }).ask("hello"), /OPENAI_API_KEY/);
+});
