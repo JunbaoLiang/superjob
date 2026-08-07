@@ -204,7 +204,7 @@ function renderDetail(d) {
       + `<div class="links"><a onclick="copyEl('oNote')">复制备注</a></div>`
       + `<label class="olabel">接受连接后的跟进私信 / 邮件(可改)</label>`
       + `<textarea id="oMsg" class="ota" rows="7">${esc(d.outreach.message || "")}</textarea>`
-      + `<div class="links"><a onclick="copyEl('oMsg')">复制消息</a> <a onclick="genOutreach()">重新生成</a></div>`;
+      + `<div class="links"><a onclick="copyEl('oMsg')">复制消息</a> <a onclick="saveOutreach()">保存编辑</a> <a onclick="genOutreach()">重新生成</a></div>`;
   } else {
     h += `<p class="meta">要主动联系时,生成「该找谁 + 短信草稿」(可编辑)。</p>`
       + `<button id="obtn" onclick="genOutreach()">生成外联建议</button><div class="prog" id="oprog"></div>`;
@@ -261,6 +261,11 @@ function genOutreach() {
       if (curId === id) refreshDetail();
     })
     .catch(() => { if (btn) { btn.disabled = false; btn.textContent = "重试"; } });
+}
+function saveOutreach() {
+  if (!curId) return;
+  api("/api/outreach/save", { method: "POST", body: JSON.stringify({ id: curId, note: $("oNote").value, message: $("oMsg").value }) })
+    .then((res) => { if (res.error) { alert(res.error); return; } refreshDetail(); });
 }
 
 // —— 生成材料:提交任务 + 轮询进度 ——

@@ -17,6 +17,7 @@ import {
 import { writeMatchReport } from "./report.js";
 import { getProfileAll, saveProfile } from "./prompts.js";
 import { assessMaterialReadiness, confirmMaterialReadiness, overrideMaterialReadiness } from "./material-readiness.js";
+import { applyOutreachEdit } from "./outreach-edit.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -181,6 +182,16 @@ async function handle(req, res) {
     resetUsage();
     const outreach = await generateOutreach(rid);
     sendJSON(res, 200, { ...outreach, usage: usageSummary() });
+    return;
+  }
+
+  if (req.method === "POST" && p === "/api/outreach/save") {
+    const body = JSON.parse((await readBody(req)) || "{}");
+    const rid = await resolveJobId(body.id);
+    const row = await getJob(rid);
+    const outreach = applyOutreachEdit(row.outreach, body);
+    await saveFields(rid, { outreach });
+    sendJSON(res, 200, { id: rid, outreach });
     return;
   }
 

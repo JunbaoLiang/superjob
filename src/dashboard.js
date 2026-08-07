@@ -217,7 +217,7 @@ function renderDetail(d){
       +'<div class=links><a onclick="copyEl(\\'oNote\\')">复制备注</a></div>';
     h+='<label class=olabel>接受连接后的跟进私信 / 邮件(1度好友或有邮箱时用,可改)</label>'
       +'<textarea id=oMsg class=ota rows=7>'+esc(d.outreach.message||"")+'</textarea>'
-      +'<div class=links><a onclick="copyEl(\\'oMsg\\')">复制消息</a> <a onclick="genOutreach()">重新生成</a></div>';
+      +'<div class=links><a onclick="copyEl(\\'oMsg\\')">复制消息</a> <a onclick="saveOutreach()">保存编辑</a> <a onclick="genOutreach()">重新生成</a></div>';
   }else{
     h+='<p class=meta>要主动联系时,生成「该找谁 + 短信草稿」(可编辑)。</p>'
       +'<button id=obtn onclick="genOutreach()">生成外联建议</button><div class=prog id=oprog></div>';
@@ -233,6 +233,7 @@ function countNote(){ var el=document.getElementById("oNote"),c=document.getElem
   var n=el.value.length; c.textContent=" "+n+"/200"; c.style.color=n>200?"#b4472f":"#5c6675";
   el.style.borderColor=n>200?"#b4472f":"";
 }
+function saveOutreach(){if(!curId)return;var note=document.getElementById("oNote"),message=document.getElementById("oMsg");fetch("/api/outreach/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:curId,note:note.value,message:message.value})}).then(function(r){return r.json()}).then(function(res){if(res.error){alert(res.error);return;}refreshDetail();});}
 
 function genOutreach(){ if(!curId)return; var id=curId;
   var btn=document.getElementById("obtn"); if(btn){btn.disabled=true;btn.textContent="生成中(约 10 秒)…";}
@@ -264,7 +265,7 @@ function delJob(){ if(!curId)return;
   fetch("/api/delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:curId})})
     .then(function(r){return r.json()}).then(function(){ closeDetail(); loadBoard(); });
 }
-function generate(){ if(!curId)return; var id=curId;
+function generate(){ if(!curId)return; var id=curId; if(document.getElementById("genbtn")&&document.getElementById("genbtn").textContent.indexOf("重新")>=0&&!confirm("已有材料将被重新生成并覆盖当前草稿；历史已投/被拒材料不会受影响。继续吗？"))return;
   var btn=document.getElementById("genbtn"); if(btn){btn.disabled=true;btn.textContent="生成中…";}
   var prog=document.getElementById("prog"); prog.textContent="";
   var es=new EventSource("/api/gen?id="+encodeURIComponent(id));

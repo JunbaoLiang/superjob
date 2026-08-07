@@ -20,6 +20,7 @@ import { config } from "./config.js";
 import { assessMaterialReadiness, confirmMaterialReadiness, overrideMaterialReadiness } from "./material-readiness.js";
 import { BatchImportQueue, prepareBatchCapture } from "./batch-import.js";
 import { collectJobMetrics } from "./metrics.js";
+import { applyOutreachEdit } from "./outreach-edit.js";
 
 function loadToken() {
   const file = path.join(config.root, ".capture-token");
@@ -277,6 +278,19 @@ function makeHandler(port, token) {
           resetUsage();
           const outreach = await generateOutreach(rid);
           sendJSON(res, 200, cors, { ...outreach, usage: usageSummary() });
+        } catch (e) { sendJSON(res, 400, cors, { error: e.message }); }
+      })();
+      return;
+    }
+
+    if (req.method === "POST" && p === "/api/outreach/save") {
+      (async () => {
+        try {
+          const body = JSON.parse((await readBody(req)) || "{}");
+          const id = resolveJobId(body.id);
+          const outreach = applyOutreachEdit(loadJobFile(id, "outreach.json"), body);
+          saveJobFile(id, "outreach.json", outreach);
+          sendJSON(res, 200, cors, { id, outreach });
         } catch (e) { sendJSON(res, 400, cors, { error: e.message }); }
       })();
       return;
