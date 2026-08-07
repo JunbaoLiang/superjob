@@ -98,6 +98,7 @@ var curTab="report", curId=null, dragId=null, gQueue="";
 
 function api(p){return fetch(p).then(function(r){return r.json()});}
 function esc(s){return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function safeHref(url){try{var u=new URL(String(url));return /^(https?):$/.test(u.protocol)?esc(u.href):"";}catch(e){return "";}}
 function scoreView(s){if(!s||!s.match)return {legacy:true,match:s||{},hard_blockers:(s&&s.hard_blockers)||[],risks:[],eligibility:null,recommendation:null};return {legacy:false,match:s.match,hard_blockers:s.eligibility.hard_blockers,risks:s.eligibility.risks,eligibility:s.eligibility.verdict,recommendation:s.recommendation};}
 
 /* —— 批量导入与队列 —— */
@@ -161,7 +162,7 @@ function renderDetail(d){
   var meta=[j.location,j.visa_sponsorship&&("签证 "+j.visa_sponsorship),j.salary,j.remote_policy].filter(Boolean).join(" · ");
   var h='<h2>'+esc(j.company)+' — '+esc(j.title)+'</h2><div class=meta>'+esc(meta)+'</div>';
   h+='<div class=bar><label>投递状态 </label><select onchange="changeStatus(this.value)">'+statusOptions(d.status)+'</select>';
-  if(j.url) h+=' <a class=links href="'+esc(j.url)+'" target=_blank>原始职位 ↗</a>';
+  var jobHref=safeHref(j.url); if(jobHref) h+=' <a class=links href="'+jobHref+'" target=_blank rel="noopener noreferrer">原始职位 ↗</a>';
   h+=' <button class=danger onclick="delJob()">删除</button></div>';
   var rd=d.readiness;
   h+='<div class=sec><h3>材料就绪</h3>';
@@ -305,7 +306,7 @@ function mdToHtml(md){
     .replace(/\\*\\*(.+?)\\*\\*/g,"<strong>$1</strong>")
     .replace(/(^|[^*])\\*([^*]+?)\\*(?!\\*)/g,"$1<em>$2</em>")
     .replace(/\`(.+?)\`/g,"<code>$1</code>")
-    .replace(/\\[(.+?)\\]\\((.+?)\\)/g,'<a href="$2" target=_blank>$1</a>');}
+    .replace(/\\[(.+?)\\]\\((.+?)\\)/g,function(_,label,url){var href=safeHref(url);return href?'<a href="'+href+'" target=_blank rel="noopener noreferrer">'+label+'</a>':label;});}
   var lines=md.replace(/\\r\\n/g,"\\n").split("\\n"),out=[],i=0,inList=false;
   function closeL(){if(inList){out.push("</ul>");inList=false;}}
   while(i<lines.length){
