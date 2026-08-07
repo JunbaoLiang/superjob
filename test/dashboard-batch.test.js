@@ -8,4 +8,6 @@ test("dashboard exposes local batch import and visible queue controls", () => {
   assert.match(html, /\/api\/import\/batch/);
   assert.match(html, /\/api\/capture-queue/);
   assert.match(html, /只粘贴 URL/);
+  assert.match(html, /\/api\/metrics/);
+  assert.match(html, /本地指标/);
 });
