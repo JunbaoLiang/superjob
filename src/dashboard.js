@@ -68,14 +68,20 @@ iframe.pdf{width:100%;height:70vh;border:1px solid var(--line);border-radius:10p
 .ota{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:13px/1.5 -apple-system,Arial,sans-serif;resize:vertical;color:var(--ink)}
 .olabel{display:block;font-size:12px;color:var(--muted);margin:9px 0 3px}
 .ocount{font-weight:600;font-variant-numeric:tabular-nums}
+.batchpanel{position:fixed;right:18px;top:58px;z-index:10;width:min(520px,calc(100vw - 36px));background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:0 10px 34px rgba(0,0,0,.16)}
+.batchpanel h2{font-size:15px;margin:0 0 5px}.batchpanel .meta{margin:0 0 8px}.batchresult{max-height:150px;overflow:auto;margin-top:8px;font-size:12px;color:var(--muted)}
 </style></head><body>
 <header>
   <h1>Job Copilot</h1>
   <span class=hint id=hint></span>
   <span style="color:#9aa4b0;font-size:12px">拖动卡片改状态 · 点卡片看详情</span>
+  <button class=ghost onclick="toggleBatch()">批量导入 JD</button>
   <button class=ghost onclick="loadBoard()">刷新</button>
 </header>
 <div class=board id=board></div>
+<div class=batchpanel id=batchpanel hidden><button class=x onclick="toggleBatch()">✕</button><h2>批量导入 JD</h2>
+<p class=meta>每个 JD 用空行分隔。只粘贴 URL 不会自动抓网页；请用浏览器扩展抓取该页，或同时粘贴 JD 正文。</p>
+<textarea class=ota id=batchtext rows=11 placeholder="职位 JD 1\n\n职位 JD 2"></textarea><div class=bar><button onclick="submitBatch()">加入队列</button><button class=ghost onclick="refreshCaptureQueue()">查看队列</button></div><div class=batchresult id=batchresult></div></div>
 <div class=scrim id=scrim hidden onclick="closeDetail()"></div>
 <div class=drawer id=drawer hidden><button class=x onclick="closeDetail()">✕</button><div id=detail></div></div>
 <script>
@@ -90,6 +96,13 @@ var curTab="report", curId=null, dragId=null, gQueue="";
 function api(p){return fetch(p).then(function(r){return r.json()});}
 function esc(s){return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function scoreView(s){if(!s||!s.match)return {legacy:true,match:s||{},hard_blockers:(s&&s.hard_blockers)||[],risks:[],eligibility:null,recommendation:null};return {legacy:false,match:s.match,hard_blockers:s.eligibility.hard_blockers,risks:s.eligibility.risks,eligibility:s.eligibility.verdict,recommendation:s.recommendation};}
+
+/* —— 批量导入与队列 —— */
+function toggleBatch(){var p=document.getElementById("batchpanel");p.hidden=!p.hidden;if(!p.hidden)refreshCaptureQueue();}
+function batchItems(text){return text.split(/\\r?\\n\\s*\\r?\\n/g).map(function(x){return x.trim();}).filter(Boolean).map(function(x){return /^https?:\\/\\/\\S+$/i.test(x)?{url:x}:{text:x};});}
+function queueHTML(data){var h="";if(!data.items||!data.items.length)return "队列为空。";data.items.forEach(function(x){h+='<div>'+esc(x.id||"—")+' · '+esc(x.state||x.kind||"?")+(x.attempts!=null?" · 第 "+x.attempts+" 次":"")+(x.error?" · ⚠ "+esc(x.error):"")+'</div>';});return h;}
+function refreshCaptureQueue(){api("/api/capture-queue").then(function(d){document.getElementById("batchresult").innerHTML=queueHTML(d);});}
+function submitBatch(){var text=document.getElementById("batchtext").value,items=batchItems(text),out=document.getElementById("batchresult");if(!items.length){out.textContent="请至少粘贴一个 JD。";return;}out.textContent="正在加入队列…";fetch("/api/import/batch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items})}).then(function(r){return r.json()}).then(function(d){if(d.error){out.textContent=d.error;return;}var h='已接受 '+d.summary.accepted+'；重复 '+d.summary.duplicates+'；拒绝 '+d.summary.rejected+'。';(d.items||[]).filter(function(x){return x.kind!=="accepted";}).forEach(function(x){h+='<div>⚠ '+esc(x.kind)+': '+esc(x.error||x.id||"")+'</div>';});out.innerHTML=h;document.getElementById("batchtext").value="";loadBoard();setTimeout(refreshCaptureQueue,500);}).catch(function(){out.textContent="本地服务连接失败。";});}
 
 /* —— 看板 —— */
 function loadBoard(){
