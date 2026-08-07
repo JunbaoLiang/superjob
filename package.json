@@ -9,7 +9,8 @@
   },
   "scripts": {
     "add": "node src/cli.js add",
-    "list": "node src/cli.js list"
+    "list": "node src/cli.js list",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20.12"

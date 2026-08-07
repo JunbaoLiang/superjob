@@ -15,6 +15,8 @@ import { usageSummary } from "./claude.js";
 import { writeMatchReport } from "./report.js";
 import { exportJob } from "./export.js";
 import { startServer } from "./server.js";
+import { config } from "./config.js";
+import { applyRecordPolicyMigration, planRecordPolicyMigration } from "./record-policy.js";
 import {
   listJobs, loadJobFile, hasJobFile, resolveJobId, jobDir,
   STATUSES, setStatus, jobStatus, deleteJob,
@@ -306,6 +308,16 @@ function cmdShow(args) {
   }
 }
 
+function cmdMigrateRecordPolicy(args) {
+  const apply = args.includes("--apply");
+  const result = apply
+    ? applyRecordPolicyMigration(config.jobsDir)
+    : planRecordPolicyMigration(config.jobsDir);
+  const { add, unchanged, errors } = result.summary;
+  console.log(`${apply ? "已执行" : "Dry-run"} record_policy 迁移: 将新增 ${add}, 已保留 ${unchanged}, 异常 ${errors}`);
+  if (!apply) console.log("未写入任何岗位数据。确认结果后才可运行: node src/cli.js migrate-record-policy --apply");
+}
+
 function getFlag(args, name) {
   const i = args.indexOf(name);
   return i !== -1 ? args[i + 1] : null;
@@ -338,6 +350,7 @@ try {
     case "report": cmdReport(args); break;
     case "list":   cmdList(); break;
     case "show":   cmdShow(args); break;
+    case "migrate-record-policy": cmdMigrateRecordPolicy(args); break;
     default:
       console.log(`求职助手 (M1 命令行版)
 
@@ -355,6 +368,7 @@ try {
   node src/cli.js serve [--port N]  启动本地抓取服务,配合 Chrome 扩展一键抓取招聘页(默认端口 8787)
   node src/cli.js list              列出所有职位(带投递状态)
   node src/cli.js show <job-id>     查看打分详情
+  node src/cli.js migrate-record-policy [--apply] 迁移历史/活跃岗位元数据；默认 dry-run
 
 投递状态: new(待定) → to-apply(待投) → applied(已投) → interview(面试) → offer / rejected;skip(不投)
 macOS 技巧: 网页上全选复制 JD 后直接  pbpaste | node src/cli.js add -`);

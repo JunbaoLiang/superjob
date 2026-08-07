@@ -1,0 +1,18 @@
+# Root-level Render Blueprint for the cloud API. No secrets are stored here.
+services:
+  - type: web
+    name: job-copilot-api
+    runtime: docker
+    rootDir: cloud/server
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: APP_TOKEN
+        generateValue: true
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-6
