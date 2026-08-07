@@ -12,7 +12,7 @@ import { extractJob, scoreJob, generateMaterials, generateOutreach } from "./pip
 import { scoreView, shouldAutoSkip } from "./score-policy.js";
 import { usageSummary, resetUsage } from "./llm.js";
 import {
-  setStatus, STATUSES, jobStatus, listJobs, loadJobFile, hasJobFile, jobDir, resolveJobId, deleteJob,
+  setStatus, STATUSES, jobStatus, listJobs, loadJobFile, saveJobFile, hasJobFile, jobDir, resolveJobId, deleteJob,
 } from "./jobs.js";
 import { writeMatchReport } from "./report.js";
 import { dashboardHTML } from "./dashboard.js";
