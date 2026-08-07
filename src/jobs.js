@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
+import { assertCanMarkApplied } from "./material-readiness.js";
 
 function slugify(s) {
   return (s || "unknown")
@@ -27,6 +28,23 @@ export const STATUSES = {
 
 const STATUS_KEYS = Object.keys(STATUSES);
 const STATUS_RE = new RegExp(`-(${STATUS_KEYS.join("|")})$`);
+
+function assertSafeJobId(id) {
+  if (typeof id !== "string" || !id || path.basename(id) !== id) {
+    throw new Error(`非法 job-id: ${id}`);
+  }
+  const base = path.resolve(config.jobsDir);
+  const resolved = path.resolve(base, id);
+  if (!resolved.startsWith(base + path.sep)) throw new Error(`非法 job-id: ${id}`);
+  return resolved;
+}
+
+function assertSafeFilename(filename) {
+  if (typeof filename !== "string" || !filename || path.basename(filename) !== filename) {
+    throw new Error(`非法文件名: ${filename}`);
+  }
+  return filename;
+}
 
 /** 稳定的「公司-岗位」slug(不含状态,不含日期) */
 export function jobSlug(company, title) {
@@ -58,11 +76,12 @@ export function makeJobId(company, title, status = "new") {
 }
 
 export function jobDir(id) {
-  return path.join(config.jobsDir, id);
+  return assertSafeJobId(id);
 }
 
 export function saveJobFile(id, filename, content) {
   const dir = jobDir(id);
+  assertSafeFilename(filename);
   fs.mkdirSync(dir, { recursive: true });
   const text = typeof content === "string" ? content : JSON.stringify(content, null, 2);
   fs.writeFileSync(path.join(dir, filename), text, "utf8");
@@ -79,7 +98,7 @@ export function deleteJob(id) {
 }
 
 export function loadJobFile(id, filename) {
-  const file = path.join(jobDir(id), filename);
+  const file = path.join(jobDir(id), assertSafeFilename(filename));
   if (!fs.existsSync(file)) {
     throw new Error(`文件不存在: ${file}`);
   }
@@ -88,7 +107,7 @@ export function loadJobFile(id, filename) {
 }
 
 export function hasJobFile(id, filename) {
-  return fs.existsSync(path.join(jobDir(id), filename));
+  return fs.existsSync(path.join(jobDir(id), assertSafeFilename(filename)));
 }
 
 /** 读取某职位的当前状态(优先读 job.json.status,退化到从目录名解析) */
@@ -110,6 +129,7 @@ export function setStatus(id, newStatus) {
     throw new Error(`未知状态「${newStatus}」。可用: ${STATUS_KEYS.join(", ")}`);
   }
   const job = loadJobFile(id, "job.json");
+  if (newStatus === "applied") assertCanMarkApplied(job);
   const slug = job.slug || slugFromId(id);
   let newId = `${slug}-${newStatus}`;
   if (newId !== id && fs.existsSync(jobDir(newId))) {

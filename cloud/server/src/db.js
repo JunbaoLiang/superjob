@@ -12,6 +12,11 @@ export const pool = new pg.Pool({
 
 export const q = (text, params) => pool.query(text, params);
 
+export async function ensureReadinessSchema(query = q) {
+  await query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS record_policy JSONB`);
+  await query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS material_readiness JSONB`);
+}
+
 /** 建表(幂等);启动时调用 */
 export async function initDb() {
   await q(`
@@ -56,6 +61,8 @@ export async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // CREATE TABLE IF NOT EXISTS 不会演进既有 Neon 表；两列仅新增，绝不在启动时回填数据。
+  await ensureReadinessSchema();
   // 崩溃恢复:上次进程死在 running 的任务重新排队(重跑一遍,结果幂等)
   await q(`UPDATE tasks SET state='queued', progress='[]', updated_at=now() WHERE state='running'`);
   // 清理 7 天前的已完成任务记录

@@ -82,6 +82,7 @@ iframe.pdf{width:100%;height:70vh;border:1px solid var(--line);border-radius:10p
 var STATUS={"new":"🆕 待定","to-apply":"📮 待投","applied":"✅ 已投","interview":"🎤 面试中","offer":"🎉 Offer","rejected":"❌ 已拒","skip":"🚫 不投"};
 var ORDER=["new","to-apply","applied","interview","offer","rejected","skip"];
 var VERDICT={strong_match:"强匹配",worth_applying:"值得投",stretch:"够得着",skip:"匹配低"};
+var READINESS={"not-generated":"未生成",draft:"待确认","needs-review":"需复核",ready:"已就绪"};
 var curTab="report", curId=null, dragId=null, gQueue="";
 
 function api(p){return fetch(p).then(function(r){return r.json()});}
@@ -102,7 +103,7 @@ function loadBoard(){
         var v=j.verdict||"";
         h+='<div class=card draggable=true ondragstart="cardDrag(event,\\''+j.id+'\\')" ondragend="cardEnd(event)" onclick="openDetail(\\''+j.id+'\\')">';
         h+='<div class=cco>'+esc(j.company||j.id)+'</div><div class=cti>'+esc(j.title||"")+'</div>';
-        h+='<div class=crow>'+(j.score!=null?'<span class="pill '+v+'">'+j.score+' '+(VERDICT[v]||v)+'</span>':'<span class=empty>未打分</span>')+(j.hasResume?'<span title="已生成材料">📄</span>':'')+'</div>';
+        h+='<div class=crow>'+(j.score!=null?'<span class="pill '+v+'">'+j.score+' '+(VERDICT[v]||v)+'</span>':'<span class=empty>未打分</span>')+(j.readiness?'<span class="pill">材料 '+(READINESS[j.readiness]||j.readiness)+'</span>':'')+(j.hasResume?'<span title="已生成材料">📄</span>':'')+'</div>';
         h+='</div>';
       });
       if(!col.length) h+='<div class=empty>—</div>';
@@ -119,7 +120,7 @@ function colDrop(e,status){ e.preventDefault(); e.currentTarget.classList.remove
   var id=dragId||e.dataTransfer.getData("text/plain"); dragId=null;
   if(!id) return;
   fetch("/api/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:id,to:status})})
-    .then(function(r){return r.json()}).then(function(res){ if(curId===id&&res.id)curId=res.id; loadBoard(); });
+    .then(function(r){return r.json()}).then(function(res){ if(res.error){alert(res.error);return;} if(curId===id&&res.id)curId=res.id; loadBoard(); });
 }
 
 /* —— 详情抽屉 —— */
@@ -141,6 +142,17 @@ function renderDetail(d){
   h+='<div class=bar><label>投递状态 </label><select onchange="changeStatus(this.value)">'+statusOptions(d.status)+'</select>';
   if(j.url) h+=' <a class=links href="'+esc(j.url)+'" target=_blank>原始职位 ↗</a>';
   h+=' <button class=danger onclick="delJob()">删除</button></div>';
+  var rd=d.readiness;
+  h+='<div class=sec><h3>材料就绪</h3>';
+  if(!rd){ h+='<p class=meta>尚未初始化 readiness；不能标记为已投。</p>'; }
+  else {
+    h+='<p><span class=pill>材料 '+(READINESS[rd.state]||rd.state)+'</span></p>';
+    if(rd.assessment){ h+='<p class=meta>简历核查 '+esc(rd.assessment.resume_fact_verdict)+' · 求职信核查 '+esc(rd.assessment.cover_fact_verdict)+' · 简历 '+esc(rd.assessment.resume_pages==null?"页数未知":rd.assessment.resume_pages+" 页")+'</p>'; }
+    if(rd.confirmation){ h+='<p class=meta>确认方式: '+esc(rd.confirmation.mode)+(rd.confirmation.reason?' · '+esc(rd.confirmation.reason):'')+'</p>'; }
+    if(rd.state==="draft") h+='<button onclick="confirmReady()">确认材料 ready</button>';
+    if(rd.state==="draft"||rd.state==="needs-review") h+=' <button class=ghost onclick="overrideReady()">人工 override…</button>';
+  }
+  h+='</div>';
   if(s){
     h+='<div class=sec><h3>评分 '+s.score+' / 100 · '+(VERDICT[s.verdict]||s.verdict)+'</h3>';
     if(s.rationale&&s.rationale.length){h+='<ul class=tight>';s.rationale.forEach(function(r){h+='<li>'+esc(r)+'</li>';});h+='</ul>';}
@@ -210,7 +222,15 @@ function copyEl(id){ var el=document.getElementById(id); if(!el)return;
 
 function changeStatus(to){ if(!curId)return;
   fetch("/api/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:curId,to:to})})
-    .then(function(r){return r.json()}).then(function(res){ curId=res.id||curId; loadBoard(); refreshDetail(); });
+    .then(function(r){return r.json()}).then(function(res){ if(res.error){alert(res.error);refreshDetail();return;} curId=res.id||curId; loadBoard(); refreshDetail(); });
+}
+function confirmReady(){ if(!curId)return;
+  fetch("/api/readiness/confirm",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:curId})})
+    .then(function(r){return r.json()}).then(function(res){ if(res.error){alert(res.error);return;} loadBoard();refreshDetail(); });
+}
+function overrideReady(){ if(!curId)return; var reason=prompt("请填写 override 原因（会记录在岗位中）："); if(reason===null)return;
+  fetch("/api/readiness/override",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:curId,reason:reason})})
+    .then(function(r){return r.json()}).then(function(res){ if(res.error){alert(res.error);return;} loadBoard();refreshDetail(); });
 }
 function delJob(){ if(!curId)return;
   if(!confirm("确认删除这个职位?材料一并删除,不可恢复。")) return;

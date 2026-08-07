@@ -18,6 +18,13 @@ import { startServer } from "./server.js";
 import { config } from "./config.js";
 import { applyRecordPolicyMigration, planRecordPolicyMigration } from "./record-policy.js";
 import {
+  applyReadinessInitialization,
+  assessMaterialReadiness,
+  confirmMaterialReadiness,
+  overrideMaterialReadiness,
+  planReadinessInitialization,
+} from "./material-readiness.js";
+import {
   listJobs, loadJobFile, hasJobFile, resolveJobId, jobDir,
   STATUSES, setStatus, jobStatus, deleteJob,
 } from "./jobs.js";
@@ -318,9 +325,93 @@ function cmdMigrateRecordPolicy(args) {
   if (!apply) console.log("未写入任何岗位数据。确认结果后才可运行: node src/cli.js migrate-record-policy --apply");
 }
 
+const READINESS_BLOCKER_LABELS = {
+  "materials-missing": "缺少简历或求职信草稿",
+  "resume-fact-check-not-clean": "简历事实核查未 clean",
+  "cover-fact-check-not-clean": "求职信事实核查未 clean",
+  "resume-not-one-page": "简历页数未知或不是一页",
+  "material-profile-not-active-2027": "材料不是基于 active-2027 档案",
+};
+
+/** 只读查看某岗位的当前机器 readiness 评估；不写入 job.json。 */
+function cmdReadiness(args) {
+  const jobId = resolveJobId(args[0] || "");
+  const job = loadJobFile(jobId, "job.json");
+  const factCheck = hasJobFile(jobId, "fact-check.json") ? loadJobFile(jobId, "fact-check.json") : null;
+  const result = assessMaterialReadiness({
+    job,
+    hasResume: hasJobFile(jobId, "resume.md"),
+    hasCover: hasJobFile(jobId, "cover-letter.md"),
+    factCheck,
+  });
+  const saved = job.material_readiness?.state || "未初始化";
+  console.log(`材料 readiness: ${result.state}（已保存: ${saved}）`);
+  console.log(`简历事实核查: ${result.assessment.resume_fact_verdict}`);
+  console.log(`求职信事实核查: ${result.assessment.cover_fact_verdict}`);
+  console.log(`简历页数: ${result.assessment.resume_pages ?? "未知"}`);
+  console.log(`材料档案版本: ${result.assessment.material_profile_version}`);
+  if (result.blockers.length) {
+    console.log("未通过项:");
+    result.blockers.forEach((blocker) => console.log(`  - ${READINESS_BLOCKER_LABELS[blocker] || blocker}`));
+  } else {
+    console.log("机器闸门已通过；仍需在 T08-A2 中执行 confirm-ready 后才可标记为已投。");
+  }
+}
+
+function printReadinessPlan(summary, { applied = false } = {}) {
+  console.log(
+    `${applied ? "已新增" : "Dry-run material_readiness 初始化: 将新增"} ${summary.add}, 已保留 ${summary.preserved}, ` +
+    `已初始化 ${summary.unchanged}, 异常 ${summary.errors}`,
+  );
+  console.log(
+    `新增状态: not-generated ${summary.states["not-generated"]}, draft ${summary.states.draft}, ` +
+    `needs-review ${summary.states["needs-review"]}, ready ${summary.states.ready}`,
+  );
+  if (!applied) console.log("未写入任何岗位数据；加 --apply 才执行已确认的活跃岗位初始化。");
+}
+
+function cmdPlanReadiness(args) {
+  const apply = args.includes("--apply");
+  const { summary } = apply
+    ? applyReadinessInitialization(config.jobsDir)
+    : planReadinessInitialization(config.jobsDir);
+  printReadinessPlan(summary, { applied: apply });
+}
+
 function getFlag(args, name) {
   const i = args.indexOf(name);
   return i !== -1 ? args[i + 1] : null;
+}
+
+function currentReadinessAssessment(jobId) {
+  const job = loadJobFile(jobId, "job.json");
+  const factCheck = hasJobFile(jobId, "fact-check.json") ? loadJobFile(jobId, "fact-check.json") : null;
+  return {
+    job,
+    assessment: assessMaterialReadiness({
+      job,
+      hasResume: hasJobFile(jobId, "resume.md"),
+      hasCover: hasJobFile(jobId, "cover-letter.md"),
+      factCheck,
+    }),
+  };
+}
+
+function cmdConfirmReady(args) {
+  const jobId = resolveJobId(args[0] || "");
+  const { job, assessment } = currentReadinessAssessment(jobId);
+  confirmMaterialReadiness(job, assessment);
+  saveJobFile(jobId, "job.json", job);
+  console.log("✅ 材料已人工确认 ready；现在才允许标记为 applied。");
+}
+
+function cmdOverrideReady(args) {
+  const jobId = resolveJobId(args[0] || "");
+  const reason = getFlag(args.slice(1), "--reason") || "";
+  const { job, assessment } = currentReadinessAssessment(jobId);
+  overrideMaterialReadiness(job, assessment, reason);
+  saveJobFile(jobId, "job.json", job);
+  console.log("✅ 已记录带理由的 readiness override；现在允许标记为 applied。");
 }
 
 /** 打印本次 API 用量与预估成本;没调用过 API 就不打印 */
@@ -353,6 +444,10 @@ try {
     case "list":   cmdList(); break;
     case "show":   cmdShow(args); break;
     case "migrate-record-policy": cmdMigrateRecordPolicy(args); break;
+    case "readiness": cmdReadiness(args); break;
+    case "plan-material-readiness": cmdPlanReadiness(args); break;
+    case "confirm-ready": cmdConfirmReady(args); break;
+    case "override-ready": cmdOverrideReady(args); break;
     default:
       console.log(`求职助手 (M1 命令行版)
 
@@ -371,6 +466,10 @@ try {
   node src/cli.js list              列出所有职位(带投递状态)
   node src/cli.js show <job-id>     查看打分详情
   node src/cli.js migrate-record-policy [--apply] 迁移历史/活跃岗位元数据；默认 dry-run
+  node src/cli.js readiness <job-id>       只读查看材料就绪闸门与未通过项
+  node src/cli.js plan-material-readiness [--apply] 统计/初始化活跃岗位 readiness
+  node src/cli.js confirm-ready <job-id>   人工确认通过全部闸门的材料
+  node src/cli.js override-ready <job-id> --reason "…" 记录理由后人工放行
 
 投递状态: new(待定) → to-apply(待投) → applied(已投) → interview(面试) → offer / rejected;skip(不投)
 macOS 技巧: 网页上全选复制 JD 后直接  pbpaste | node src/cli.js add -`);

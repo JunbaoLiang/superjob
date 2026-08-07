@@ -20,6 +20,13 @@ finish() { echo ""; read -r -p "按回车关闭窗口..." _; exit "${1:-0}"; }
 
 echo "📁 项目目录: $DIR"
 
+# Chrome 扩展和 manifest 当前固定到 8787；禁止安装器制造“服务与扩展不在同一端口”的半可用状态。
+if [ "$PORT" != "8787" ]; then
+  echo "❌ 本地安装器目前只支持默认端口 8787（Chrome 扩展也固定使用它）。"
+  echo "   请移除 SUPERJOB_PORT 后重新运行；自定义端口需要先完成扩展同步配置。"
+  finish 1
+fi
+
 # ---------- 1) 定位 node(走登录 shell,兼容 nvm / homebrew) ----------
 NODE="$(/bin/zsh -l -c 'command -v node' 2>/dev/null | tail -1 || true)"
 if [ -z "$NODE" ] || [ ! -x "$NODE" ]; then
@@ -62,6 +69,10 @@ cat > "$PLIST" <<EOF
     <string>serve</string>
   </array>
   <key>WorkingDirectory</key><string>$DIR</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>SUPERJOB_PORT</key><string>$PORT</string>
+  </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ProcessType</key><string>Background</string>
@@ -71,11 +82,17 @@ cat > "$PLIST" <<EOF
 </plist>
 EOF
 
-# 先卸旧再装新(改过 node 路径/端口也能生效)
+if ! plutil -lint "$PLIST" >/dev/null 2>&1; then
+  echo "❌ LaunchAgent plist 格式无效: $PLIST"
+  finish 1
+fi
+
+# 先卸旧再装新；端口固定为 8787，避免与扩展配置分叉。
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 sleep 1
 if ! launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null; then
-  launchctl load "$PLIST" 2>/dev/null || true
+  echo "❌ LaunchAgent 注册失败。请检查 macOS 登录会话权限与日志: $DIR/data/server.log"
+  finish 1
 fi
 
 # ---------- 4) 安装全局 job 命令 ----------
@@ -87,6 +104,8 @@ if [ -z "$BIN" ]; then mkdir -p "$HOME/bin"; BIN="$HOME/bin"; fi
 cat > "$BIN/job" <<EOF
 #!/bin/sh
 # Job Copilot CLI 包装(由 安装.command 生成)
+# managed-by: superjob
+# source: $DIR/src/cli.js
 exec "$NODE" "$DIR/src/cli.js" "\$@"
 EOF
 chmod +x "$BIN/job"
@@ -102,7 +121,7 @@ fi
 printf "⏳ 等待服务启动"
 OK=""
 for _ in $(seq 1 20); do
-  if curl -s --max-time 1 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then OK=1; break; fi
+  if curl -fsS --max-time 1 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then OK=1; break; fi
   printf "."; sleep 0.5
 done
 echo ""

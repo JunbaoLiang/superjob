@@ -16,6 +16,7 @@ import {
 import { writeMatchReport } from "./report.js";
 import { dashboardHTML } from "./dashboard.js";
 import { config } from "./config.js";
+import { assessMaterialReadiness, confirmMaterialReadiness, overrideMaterialReadiness } from "./material-readiness.js";
 
 function loadToken() {
   const file = path.join(config.root, ".capture-token");
@@ -36,14 +37,14 @@ function corsHeaders(origin) {
 }
 
 /** /capture 鉴权:扩展来源 或 token 正确 */
-function captureAllowed(origin, token, serverToken) {
+export function captureAllowed(origin, token, serverToken) {
   if (origin && origin.startsWith("chrome-extension://")) return true;
   if (token && token === serverToken) return true;
   return false;
 }
 
 /** /api/* 只给本机面板同源用:无 Origin(同源 GET)或 Origin 就是本地面板 */
-function localOrigin(origin, port) {
+export function localOrigin(origin, port) {
   return !origin || origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}`;
 }
 
@@ -120,6 +121,19 @@ function progressLine(step, detail) {
   }
 }
 
+function currentReadinessAssessment(id, job = loadJobFile(id, "job.json")) {
+  const factCheck = hasJobFile(id, "fact-check.json") ? loadJobFile(id, "fact-check.json") : null;
+  return {
+    job,
+    assessment: assessMaterialReadiness({
+      job,
+      hasResume: hasJobFile(id, "resume.md"),
+      hasCover: hasJobFile(id, "cover-letter.md"),
+      factCheck,
+    }),
+  };
+}
+
 const FILE_TYPES = {
   ".md": "text/markdown; charset=utf-8",
   ".txt": "text/plain; charset=utf-8",
@@ -172,7 +186,7 @@ function makeHandler(port, token) {
         const score = hasJobFile(id, "score.json") ? loadJobFile(id, "score.json") : null;
         return { id, company: job.company, title: job.title, status: jobStatus(id),
           score: score ? score.score : null, verdict: score ? score.verdict : null,
-          hasResume: hasJobFile(id, "resume.md") };
+          hasResume: hasJobFile(id, "resume.md"), readiness: job.material_readiness?.state || null };
       });
       sendJSON(res, 200, cors, jobs); return;
     }
@@ -185,6 +199,7 @@ function makeHandler(port, token) {
           job: loadJobFile(id, "job.json"),
           score: hasJobFile(id, "score.json") ? loadJobFile(id, "score.json") : null,
           factCheck: hasJobFile(id, "fact-check.json") ? loadJobFile(id, "fact-check.json") : null,
+          readiness: loadJobFile(id, "job.json").material_readiness || null,
           hasResume: hasJobFile(id, "resume.md"),
           hasCover: hasJobFile(id, "cover-letter.md"),
           outreach: hasJobFile(id, "outreach.json") ? loadJobFile(id, "outreach.json") : null,
@@ -251,6 +266,34 @@ function makeHandler(port, token) {
           const newId = setStatus(resolveJobId(id), to);
           writeMatchReport(newId);
           sendJSON(res, 200, cors, { id: newId, status: jobStatus(newId) });
+        } catch (e) { sendJSON(res, 400, cors, { error: e.message }); }
+      })();
+      return;
+    }
+
+    if (req.method === "POST" && p === "/api/readiness/confirm") {
+      (async () => {
+        try {
+          const { id } = JSON.parse((await readBody(req)) || "{}");
+          const rid = resolveJobId(id);
+          const { job, assessment } = currentReadinessAssessment(rid);
+          const readiness = confirmMaterialReadiness(job, assessment);
+          saveJobFile(rid, "job.json", job);
+          sendJSON(res, 200, cors, { id: rid, readiness });
+        } catch (e) { sendJSON(res, 400, cors, { error: e.message }); }
+      })();
+      return;
+    }
+
+    if (req.method === "POST" && p === "/api/readiness/override") {
+      (async () => {
+        try {
+          const { id, reason } = JSON.parse((await readBody(req)) || "{}");
+          const rid = resolveJobId(id);
+          const { job, assessment } = currentReadinessAssessment(rid);
+          const readiness = overrideMaterialReadiness(job, assessment, reason || "");
+          saveJobFile(rid, "job.json", job);
+          sendJSON(res, 200, cors, { id: rid, readiness });
         } catch (e) { sendJSON(res, 400, cors, { error: e.message }); }
       })();
       return;

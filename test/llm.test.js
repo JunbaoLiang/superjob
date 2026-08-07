@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createLlm } from "../src/llm.js";
+import { createLlm, parseJSONLoose } from "../src/llm.js";
 
 test("Anthropic adapter sends Messages request and records usage", async () => {
   let request;
@@ -48,4 +48,34 @@ test("LLM configuration fails clearly before any provider call", async () => {
   await assert.rejects(createLlm({ provider: "other", model: "x", env: {} }).ask("hello"), /LLM_PROVIDER/);
   await assert.rejects(createLlm({ provider: "openai", model: "", env: {} }).ask("hello"), /LLM_MODEL/);
   await assert.rejects(createLlm({ provider: "openai", model: "gpt-test", env: {} }).ask("hello"), /OPENAI_API_KEY/);
+});
+
+test("OpenAI incomplete responses and provider errors remain explicit", async () => {
+  const incomplete = createLlm({
+    provider: "openai", model: "gpt-5.6-terra", env: { OPENAI_API_KEY: "test-key" },
+    clients: { openai: { responses: { create: async () => ({
+      status: "incomplete", incomplete_details: { reason: "max_output_tokens" }, usage: {},
+    }) } } },
+  });
+  await assert.rejects(incomplete.ask("hello"), /模型输出未完成\(max_output_tokens\)/);
+
+  const unauthorized = createLlm({
+    provider: "openai", model: "gpt-5.6-terra", env: { OPENAI_API_KEY: "test-key" },
+    clients: { openai: { responses: { create: async () => {
+      throw Object.assign(new Error("bad key"), { status: 401 });
+    } } } },
+  });
+  await assert.rejects(unauthorized.ask("hello"), /OpenAI API key 无效/);
+});
+
+test("JSON parsing accepts fenced objects and rejects non-JSON output", () => {
+  assert.deepEqual(parseJSONLoose("```json\n{\"ok\": true}\n```"), { ok: true });
+  assert.throws(() => parseJSONLoose("not json"), /没有返回 JSON/);
+});
+
+test("JSON parsing errors do not echo model source text", () => {
+  assert.throws(
+    () => parseJSONLoose("PRIVATE RESUME TEXT"),
+    (error) => /没有返回 JSON/.test(error.message) && !error.message.includes("PRIVATE"),
+  );
 });

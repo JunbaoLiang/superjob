@@ -15,9 +15,9 @@ if [ -f "$PLIST" ]; then
   echo "🟢 已移除开机自启项"
 fi
 
-# 只删除指向本项目 cli.js 的 job 包装命令,不误删同名工具
+# 只删除本安装器写入的、且指向本项目 cli.js 的 job 包装命令,不误删同名工具
 for d in /opt/homebrew/bin /usr/local/bin "$HOME/bin"; do
-  if [ -f "$d/job" ] && grep -qs "superjob/src/cli.js" "$d/job"; then
+  if [ -f "$d/job" ] && grep -qs "managed-by: superjob" "$d/job" && grep -qs "superjob/src/cli.js" "$d/job"; then
     rm -f "$d/job"
     echo "🟢 已移除全局命令: $d/job"
   fi

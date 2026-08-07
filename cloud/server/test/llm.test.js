@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createLlm } from "../src/llm.js";
+import { createLlm, parseJSONLoose } from "../src/llm.js";
 
 test("Anthropic adapter sends Messages request and records usage", async () => {
   let request;
@@ -41,4 +41,21 @@ test("OpenAI adapter sends Responses request and records usage", async () => {
 test("LLM configuration fails clearly before any provider call", async () => {
   await assert.rejects(createLlm({ provider: "other", model: "x", env: {} }).ask("hello"), /LLM_PROVIDER/);
   await assert.rejects(createLlm({ provider: "anthropic", model: "x", env: {} }).ask("hello"), /ANTHROPIC_API_KEY/);
+});
+
+test("OpenAI incomplete response fails without a network retry", async () => {
+  const llm = createLlm({
+    provider: "openai", model: "gpt-5.6-terra", env: { OPENAI_API_KEY: "test-key" },
+    clients: { openai: { responses: { create: async () => ({
+      status: "incomplete", incomplete_details: { reason: "max_output_tokens" }, usage: {},
+    }) } } },
+  });
+  await assert.rejects(llm.ask("hello"), /模型输出未完成\(max_output_tokens\)/);
+});
+
+test("cloud JSON parsing errors do not echo model source text", () => {
+  assert.throws(
+    () => parseJSONLoose("PRIVATE RESUME TEXT"),
+    (error) => /没有返回 JSON/.test(error.message) && !error.message.includes("PRIVATE"),
+  );
 });

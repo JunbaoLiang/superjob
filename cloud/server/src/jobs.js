@@ -1,6 +1,7 @@
 // 职位数据访问层:本地版按目录存,这里按 Postgres 行存。
 // 与本地版最大的不同:status 是一列,不再把状态拼进目录名/id,id 永远稳定。
 import { q } from "./db.js";
+import { assertCanMarkApplied } from "./material-readiness.js";
 
 function slugify(s) {
   return (s || "unknown")
@@ -25,6 +26,11 @@ export const STATUSES = {
   skip: "🚫 不投",
 };
 
+export function assertStatusTransition(job, newStatus) {
+  if (!STATUSES[newStatus]) throw new Error(`未知状态「${newStatus}」。可用: ${Object.keys(STATUSES).join(", ")}`);
+  if (newStatus === "applied") assertCanMarkApplied(job);
+}
+
 export function jobSlug(company, title) {
   return `${slugify(company)}-${slugify(title)}`;
 }
@@ -40,10 +46,10 @@ export async function makeJobId(company, title) {
   return `${base}-${n}`;
 }
 
-export async function insertJob({ id, status, company, title, job, rawText }) {
+export async function insertJob({ id, status, company, title, job, rawText, recordPolicy = null }) {
   await q(
-    `INSERT INTO jobs (id, status, company, title, job, raw_text) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [id, status, company, title, job, rawText]
+    `INSERT INTO jobs (id, status, company, title, job, raw_text, record_policy) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [id, status, company, title, job, rawText, recordPolicy ? JSON.stringify(recordPolicy) : null]
   );
 }
 
@@ -56,7 +62,7 @@ export async function getJob(id) {
 
 /** 更新若干列(白名单内),自动带 updated_at */
 const FIELD_WHITELIST = new Set([
-  "status", "score", "match_report", "resume_md", "cover_md", "fact_check", "outreach", "job",
+  "status", "score", "match_report", "resume_md", "cover_md", "fact_check", "outreach", "job", "record_policy", "material_readiness",
 ]);
 export async function saveFields(id, fields) {
   const keys = Object.keys(fields).filter((k) => FIELD_WHITELIST.has(k));
@@ -70,10 +76,8 @@ export async function saveFields(id, fields) {
 }
 
 export async function setStatus(id, newStatus) {
-  if (!STATUSES[newStatus]) {
-    throw new Error(`未知状态「${newStatus}」。可用: ${Object.keys(STATUSES).join(", ")}`);
-  }
-  await getJob(id); // 校验存在
+  const job = await getJob(id);
+  assertStatusTransition(job, newStatus);
   await saveFields(id, { status: newStatus });
   return id; // id 稳定,不再改名
 }
@@ -90,12 +94,13 @@ export async function listJobs() {
            score->>'score'   AS score,
            score->>'verdict' AS verdict,
            (resume_md IS NOT NULL) AS has_resume,
+           material_readiness->>'state' AS readiness,
            captured_at
     FROM jobs ORDER BY captured_at DESC, id DESC`);
   return rows.map((r) => ({
     id: r.id, status: r.status, company: r.company, title: r.title,
     score: r.score != null ? Number(r.score) : null,
-    verdict: r.verdict, hasResume: r.has_resume,
+    verdict: r.verdict, hasResume: r.has_resume, readiness: r.readiness,
     capturedAt: r.captured_at,
   }));
 }

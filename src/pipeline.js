@@ -3,6 +3,15 @@ import { loadPrompt, fill, loadProfile } from "./prompts.js";
 import { makeJobId, saveJobFile, loadJobFile } from "./jobs.js";
 import { writeMatchReport } from "./report.js";
 import { exportJob, renderResumePdfPages } from "./export.js";
+import { recordPolicyFor } from "./record-policy.js";
+import { assertActiveMaterialRecord, refreshActiveMaterialReadiness } from "./material-readiness.js";
+import {
+  factCheckNeedsReview,
+  validateExtractOutput,
+  validateFactCheckOutput,
+  validateOutreachOutput,
+  validateScoreOutput,
+} from "./output-validation.js";
 
 /** skip 岗位海投模式使用的通用简历角度(替代打分器的「别投了」) */
 const MASS_APPLY_ANGLE =
@@ -20,7 +29,7 @@ export async function extractJob(rawText, { pageTitle = "", pageUrl = "" } = {})
     PAGE_URL: pageUrl,
     RAW_TEXT: rawText,
   });
-  const job = await askJSON(prompt, { maxTokens: 3000 });
+  const job = validateExtractOutput(await askJSON(prompt, { maxTokens: 3000 }));
 
   if (job.error) {
     return { error: job.error, reason: job.reason || "" };
@@ -30,6 +39,7 @@ export async function extractJob(rawText, { pageTitle = "", pageUrl = "" } = {})
   const jobId = makeJobId(job.company, job.title, status);
   job.slug = jobId.slice(0, jobId.length - status.length - 1); // 稳定的公司-岗位段
   job.status = status;
+  job.record_policy = recordPolicyFor(status, { materialProfile: "unknown" });
   job.url = pageUrl || null;
   job.captured_at = new Date().toISOString();
   saveJobFile(jobId, "raw.txt", rawText);
@@ -48,7 +58,7 @@ export async function scoreJob(jobId) {
     TARGET: loadProfile("target"),
     PREFERENCES: loadProfile("preferences"),
   });
-  const score = await askJSON(prompt, { maxTokens: 4000 });
+  const score = validateScoreOutput(await askJSON(prompt, { maxTokens: 4000 }));
   saveJobFile(jobId, "score.json", score);
   writeMatchReport(jobId);
   return score;
@@ -89,38 +99,36 @@ export async function generateOutreach(jobId) {
     RAW_TEXT_HEAD: rawText.slice(0, 4000),
     PREFERENCES: loadProfile("preferences"),
   });
-  const outreach = await askJSON(prompt, { maxTokens: 2500 });
+  const outreach = validateOutreachOutput(await askJSON(prompt, { maxTokens: 2500 }));
   outreach.note = await ensureNoteLimit(outreach.note, 200);
   outreach.generated_at = new Date().toISOString();
   saveJobFile(jobId, "outreach.json", outreach);
   return outreach;
 }
 
-/** 事实核查:对比主简历与定制简历,返回 { verdict, issues }。解析失败不中断生成:视为通过并记原因 */
+/** 事实核查:对比主简历与定制简历。失败可保留草稿，但必须人工复核。 */
 async function factCheckResume(tailoredResume) {
   const prompt = fill(loadPrompt("fact-check"), {
     MASTER_RESUME: loadProfile("resume-master"),
     TAILORED_RESUME: tailoredResume,
   });
   try {
-    const result = await askJSON(prompt, { maxTokens: 6000 });
-    return { verdict: result.verdict || "clean", issues: result.issues || [] };
-  } catch (e) {
-    return { verdict: "clean", issues: [], error: "核查解析失败(已跳过,不影响出简历): " + e.message };
+    return validateFactCheckOutput(await askJSON(prompt, { maxTokens: 6000 }));
+  } catch {
+    return factCheckNeedsReview();
   }
 }
 
-/** 事实核查:对照主简历检查求职信里「关于我」的陈述,返回 { verdict, issues }。同样解析失败不中断 */
+/** 事实核查:对照主简历检查求职信里「关于我」的陈述。失败可保留草稿，但必须人工复核。 */
 async function factCheckCover(coverLetter) {
   const prompt = fill(loadPrompt("fact-check-cover"), {
     MASTER_RESUME: loadProfile("resume-master"),
     COVER_LETTER: coverLetter,
   });
   try {
-    const result = await askJSON(prompt, { maxTokens: 4000 });
-    return { verdict: result.verdict || "clean", issues: result.issues || [] };
-  } catch (e) {
-    return { verdict: "clean", issues: [], error: "核查解析失败(已跳过): " + e.message };
+    return validateFactCheckOutput(await askJSON(prompt, { maxTokens: 4000 }));
+  } catch {
+    return factCheckNeedsReview();
   }
 }
 
@@ -131,6 +139,7 @@ async function factCheckCover(coverLetter) {
  */
 export async function generateMaterials(jobId, { onProgress = () => {} } = {}) {
   const job = loadJobFile(jobId, "job.json");
+  assertActiveMaterialRecord(job);
   const score = loadJobFile(jobId, "score.json");
   const preferences = loadProfile("preferences");
   const jobJson = JSON.stringify(job, null, 2);
@@ -213,6 +222,9 @@ export async function generateMaterials(jobId, { onProgress = () => {} } = {}) {
   factCheck.cover_letter = coverCheck;
   saveJobFile(jobId, "fact-check.json", factCheck);
   onProgress("cover-factcheck-done", coverCheck);
+
+  refreshActiveMaterialReadiness(job, { hasResume: true, hasCover: true, factCheck });
+  saveJobFile(jobId, "job.json", job);
 
   // 5. 导出可提交文件(PDF/docx)
   const exports = exportJob(jobId);

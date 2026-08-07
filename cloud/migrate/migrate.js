@@ -28,6 +28,7 @@ const SCHEMA = `
     id TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'new',
     company TEXT, title TEXT, job JSONB NOT NULL DEFAULT '{}', raw_text TEXT NOT NULL DEFAULT '',
     score JSONB, match_report TEXT, resume_md TEXT, cover_md TEXT, fact_check JSONB, outreach JSONB,
+    record_policy JSONB, material_readiness JSONB,
     captured_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
   CREATE TABLE IF NOT EXISTS job_files (
     job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE, name TEXT NOT NULL,

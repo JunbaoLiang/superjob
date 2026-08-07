@@ -132,12 +132,12 @@ export function parseJSONLoose(text) {
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
   if (start === -1 || end === -1 || end <= start) {
-    throw new Error(`模型没有返回 JSON，原文开头:${text.slice(0, 200)}`);
+    throw new Error("模型没有返回 JSON 对象。");
   }
   try {
     return JSON.parse(cleaned.slice(start, end + 1));
   } catch {
-    throw new Error(`JSON 解析失败，原文开头:${text.slice(0, 200)}`);
+    throw new Error("模型返回的 JSON 无法解析。");
   }
 }
 

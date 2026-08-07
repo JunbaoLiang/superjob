@@ -16,6 +16,10 @@ export function loadPrompt(name) {
  * (后者能挡住「占位符漏写导致内容被静默丢弃」这类隐蔽 bug)。
  */
 export function fill(template, vars) {
+  const invalid = [...template.matchAll(/\{\{[^{}]*\}\}/g)]
+    .map((match) => match[0])
+    .find((placeholder) => !/^\{\{\w+\}\}$/.test(placeholder));
+  if (invalid) throw new Error(`Prompt 模板含非法占位符: ${invalid}`);
   const used = new Set();
   const out = template.replace(/\{\{(\w+)\}\}/g, (m, key) => {
     if (!(key in vars)) throw new Error(`Prompt 模板缺少变量: ${key}`);

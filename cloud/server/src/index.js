@@ -3,8 +3,9 @@
 //   POST /capture         扩展/书签抓取一个职位(排队解析+打分)
 //   /api/...              面板 API(全部需要 Authorization: Bearer <APP_TOKEN>)
 import http from "node:http";
-import crypto from "node:crypto";
 import { config } from "./config.js";
+import { authorizeHeader } from "./auth.js";
+import { editFileColumn, readFilePolicy } from "./file-policy.js";
 import { initDb } from "./db.js";
 import { startWorker, enqueue, getTask, queueState } from "./tasks.js";
 import { scoreJob, generateOutreach } from "./pipeline.js";
@@ -14,6 +15,7 @@ import {
 } from "./jobs.js";
 import { writeMatchReport } from "./report.js";
 import { getProfileAll, saveProfile } from "./prompts.js";
+import { assessMaterialReadiness, confirmMaterialReadiness, overrideMaterialReadiness } from "./material-readiness.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -36,33 +38,11 @@ function readBody(req, limit = 4_000_000) {
   });
 }
 
-/** 恒时比较,避免 token 被逐字符试出来 */
-function tokenOk(given) {
-  if (!config.token || !given) return false;
-  const a = crypto.createHash("sha256").update(given).digest();
-  const b = crypto.createHash("sha256").update(config.token).digest();
-  return crypto.timingSafeEqual(a, b);
-}
-
-function authed(req) {
-  const h = req.headers.authorization || "";
-  const m = h.match(/^Bearer\s+(.+)$/i);
-  return tokenOk(m ? m[1].trim() : "");
-}
-
 const FILE_TYPES = {
   ".md": "text/markdown; charset=utf-8",
   ".pdf": "application/pdf",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
-
-/** md 文件存 jobs 行内;成品 PDF/docx 存 job_files 表 */
-const MD_COLUMNS = {
-  "match-report.md": "match_report",
-  "resume.md": "resume_md",
-  "cover-letter.md": "cover_md",
-};
-const BIN_FILES = new Set(["resume.pdf", "resume.docx", "cover-letter.pdf", "cover-letter.docx"]);
 
 /** 打分并按 skip 自动设状态(与任务工人里的逻辑一致) */
 async function scoreAndStatus(jobId) {
@@ -70,6 +50,14 @@ async function scoreAndStatus(jobId) {
   if (score.verdict === "skip") await setStatus(jobId, "skip");
   await writeMatchReport(jobId);
   return score;
+}
+
+function currentReadinessAssessment(row) {
+  const job = { status: row.status, record_policy: row.record_policy, material_readiness: row.material_readiness };
+  return {
+    job,
+    assessment: assessMaterialReadiness({ job, hasResume: !!row.resume_md, hasCover: !!row.cover_md, factCheck: row.fact_check }),
+  };
 }
 
 async function handle(req, res) {
@@ -80,7 +68,8 @@ async function handle(req, res) {
   if (req.method === "GET" && p === "/health") { sendJSON(res, 200, { ok: true }); return; }
 
   // —— 以下全部需要口令 ——
-  if (!authed(req)) { sendJSON(res, 401, { error: "未授权:请检查访问口令(APP_TOKEN)" }); return; }
+  const auth = authorizeHeader(req.headers.authorization, config.token);
+  if (!auth.ok) { sendJSON(res, auth.status, { error: auth.error }); return; }
 
   // 抓取:入队立刻返回,后台逐个处理
   if (req.method === "POST" && p === "/capture") {
@@ -113,6 +102,7 @@ async function handle(req, res) {
       id, status: row.status,
       job: row.job, score: row.score,
       factCheck: row.fact_check,
+      readiness: row.material_readiness,
       hasResume: !!row.resume_md,
       hasCover: !!row.cover_md,
       outreach: row.outreach,
@@ -124,15 +114,16 @@ async function handle(req, res) {
   if (req.method === "GET" && p === "/api/file") {
     const id = await resolveJobId(u.searchParams.get("id") || "");
     const name = u.searchParams.get("name") || "";
-    if (MD_COLUMNS[name]) {
+    const filePolicy = readFilePolicy(name);
+    if (filePolicy?.kind === "markdown") {
       const row = await getJob(id);
-      const text = row[MD_COLUMNS[name]];
+      const text = row[filePolicy.column];
       if (!text) { sendJSON(res, 404, { error: "文件不存在" }); return; }
       res.writeHead(200, { ...CORS, "Content-Type": FILE_TYPES[".md"] });
       res.end(text);
       return;
     }
-    if (BIN_FILES.has(name)) {
+    if (filePolicy?.kind === "binary") {
       const buf = await getFile(id, name);
       if (!buf) { sendJSON(res, 404, { error: "文件不存在(可能还没导出)" }); return; }
       const ext = name.slice(name.lastIndexOf("."));
@@ -148,7 +139,7 @@ async function handle(req, res) {
   if (req.method === "PUT" && p === "/api/file") {
     const body = JSON.parse((await readBody(req)) || "{}");
     const id = await resolveJobId(body.id || "");
-    const col = { "resume.md": "resume_md", "cover-letter.md": "cover_md" }[body.name];
+    const col = editFileColumn(body.name);
     if (!col) { sendJSON(res, 400, { error: "只能编辑 resume.md / cover-letter.md" }); return; }
     if (!body.content || !body.content.trim()) { sendJSON(res, 400, { error: "内容为空" }); return; }
     await saveFields(id, { [col]: body.content });
@@ -198,6 +189,26 @@ async function handle(req, res) {
     await setStatus(rid, to);
     await writeMatchReport(rid);
     sendJSON(res, 200, { id: rid, status: to, label: STATUSES[to] });
+    return;
+  }
+
+  if (req.method === "POST" && p === "/api/readiness/confirm") {
+    const { id } = JSON.parse((await readBody(req)) || "{}");
+    const rid = await resolveJobId(id);
+    const { job, assessment } = currentReadinessAssessment(await getJob(rid));
+    const readiness = confirmMaterialReadiness(job, assessment);
+    await saveFields(rid, { material_readiness: readiness });
+    sendJSON(res, 200, { id: rid, readiness });
+    return;
+  }
+
+  if (req.method === "POST" && p === "/api/readiness/override") {
+    const { id, reason } = JSON.parse((await readBody(req)) || "{}");
+    const rid = await resolveJobId(id);
+    const { job, assessment } = currentReadinessAssessment(await getJob(rid));
+    const readiness = overrideMaterialReadiness(job, assessment, reason || "");
+    await saveFields(rid, { material_readiness: readiness });
+    sendJSON(res, 200, { id: rid, readiness });
     return;
   }
 

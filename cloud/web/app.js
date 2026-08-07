@@ -5,6 +5,7 @@
 const STATUS = { "new": "🆕 待定", "to-apply": "📮 待投", "applied": "✅ 已投", "interview": "🎤 面试中", "offer": "🎉 Offer", "rejected": "❌ 已拒", "skip": "🚫 不投" };
 const ORDER = ["new", "to-apply", "applied", "interview", "offer", "rejected", "skip"];
 const VERDICT = { strong_match: "强匹配", worth_applying: "值得投", stretch: "够得着", skip: "匹配低" };
+const READINESS = { "not-generated": "未生成", draft: "待确认", "needs-review": "需复核", ready: "已就绪" };
 
 let BASE = localStorage.getItem("jc_base") || "";
 let TOKEN = localStorage.getItem("jc_token") || "";
@@ -100,7 +101,7 @@ function loadBoard() {
         const v = j.verdict || "";
         h += `<div class="card" draggable="true" ondragstart="cardDrag(event,'${j.id}')" ondragend="cardEnd(event)" onclick="openDetail('${j.id}')">`;
         h += `<div class="cco">${esc(j.company || j.id)}</div><div class="cti">${esc(j.title || "")}</div>`;
-        h += `<div class="crow">${j.score != null ? `<span class="pill ${v}">${j.score} ${VERDICT[v] || v}</span>` : `<span class="empty">未打分</span>`}${j.hasResume ? `<span title="已生成材料">📄</span>` : ""}</div>`;
+        h += `<div class="crow">${j.score != null ? `<span class="pill ${v}">${j.score} ${VERDICT[v] || v}</span>` : `<span class="empty">未打分</span>`}${j.readiness ? `<span class="pill">材料 ${READINESS[j.readiness] || j.readiness}</span>` : ""}${j.hasResume ? `<span title="已生成材料">📄</span>` : ""}</div>`;
         h += `</div>`;
       });
       if (!col.length) h += `<div class="empty">—</div>`;
@@ -118,7 +119,7 @@ function colDrop(e, status) {
   const id = dragId || e.dataTransfer.getData("text/plain"); dragId = null;
   if (!id) return;
   api("/api/status", { method: "POST", body: JSON.stringify({ id, to: status }) })
-    .then(() => { loadBoard(); if (curId === id) refreshDetail(); });
+    .then((res) => { if (res.error) { alert(res.error); return; } loadBoard(); if (curId === id) refreshDetail(); });
 }
 
 // —— 详情抽屉 ——
@@ -143,6 +144,17 @@ function renderDetail(d) {
   h += `<div class="bar"><label>投递状态 </label><select onchange="changeStatus(this.value)">${statusOptions(d.status)}</select>`;
   if (j.url) h += ` <a class="links" href="${esc(j.url)}" target="_blank">原始职位 ↗</a>`;
   h += ` <button class="danger" onclick="delJob()">删除</button></div>`;
+  const rd = d.readiness;
+  h += `<div class="sec"><h3>材料就绪</h3>`;
+  if (!rd) h += `<p class="meta">尚未初始化 readiness；不能标记为已投。</p>`;
+  else {
+    h += `<p><span class="pill">材料 ${READINESS[rd.state] || rd.state}</span></p>`;
+    if (rd.assessment) h += `<p class="meta">简历核查 ${esc(rd.assessment.resume_fact_verdict)} · 求职信核查 ${esc(rd.assessment.cover_fact_verdict)} · 简历 ${esc(rd.assessment.resume_pages == null ? "页数未知" : rd.assessment.resume_pages + " 页")}</p>`;
+    if (rd.confirmation) h += `<p class="meta">确认方式: ${esc(rd.confirmation.mode)}${rd.confirmation.reason ? " · " + esc(rd.confirmation.reason) : ""}</p>`;
+    if (rd.state === "draft") h += `<button onclick="confirmReady()">确认材料 ready</button>`;
+    if (rd.state === "draft" || rd.state === "needs-review") h += ` <button class="ghost" onclick="overrideReady()">人工 override…</button>`;
+  }
+  h += `</div>`;
 
   if (s) {
     h += `<div class="sec"><h3>评分 ${s.score} / 100 · ${VERDICT[s.verdict] || s.verdict}</h3>`;
@@ -208,8 +220,10 @@ function copyEl(id) {
 function changeStatus(to) {
   if (!curId) return;
   api("/api/status", { method: "POST", body: JSON.stringify({ id: curId, to }) })
-    .then(() => { loadBoard(); refreshDetail(); });
+    .then((res) => { if (res.error) { alert(res.error); refreshDetail(); return; } loadBoard(); refreshDetail(); });
 }
+function confirmReady() { if (!curId) return; api("/api/readiness/confirm", { method: "POST", body: JSON.stringify({ id: curId }) }).then((res) => { if (res.error) { alert(res.error); return; } loadBoard(); refreshDetail(); }); }
+function overrideReady() { if (!curId) return; const reason = prompt("请填写 override 原因（会记录在岗位中）："); if (reason === null) return; api("/api/readiness/override", { method: "POST", body: JSON.stringify({ id: curId, reason }) }).then((res) => { if (res.error) { alert(res.error); return; } loadBoard(); refreshDetail(); }); }
 function delJob() {
   if (!curId) return;
   if (!confirm("确认删除这个职位?材料一并删除,不可恢复。")) return;
@@ -381,6 +395,7 @@ function mdToHtml(md) {
 // —— 启动 ——
 window.cardDrag = cardDrag; window.cardEnd = cardEnd; window.colOver = colOver; window.colLeave = colLeave; window.colDrop = colDrop;
 window.openDetail = openDetail; window.closeDetail = closeDetail; window.changeStatus = changeStatus; window.delJob = delJob;
+window.confirmReady = confirmReady; window.overrideReady = overrideReady;
 window.scoreJobBtn = scoreJobBtn; window.genOutreach = genOutreach; window.generate = generate; window.showTab = showTab;
 window.matView = matView; window.saveMd = saveMd; window.copyEl = copyEl; window.countNote = countNote;
 window.openProfile = openProfile; window.renderProfile = renderProfile; window.saveProfileDoc = saveProfileDoc;
